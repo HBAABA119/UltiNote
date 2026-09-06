@@ -447,7 +447,7 @@ fun SettingsScreen(
                     Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = palette.colorScheme.primary)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("UltiNote v1.1.0 — local-first school notebook", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        Text("UltiNote v1.1.1 — local-first school notebook", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         Text("Handwriting with pressure + palm rejection, PDF annotation, layers, photos, stickers, planner. AI companion + cloud sync are Coming Soon — your notes stay on-device for now.", fontSize = 11.sp, color = palette.colorScheme.onSurfaceVariant)
                     }
                 }

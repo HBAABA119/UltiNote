@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.1 — CI green + release pipeline (2026-09-06)
+
+- Fix `gradlew: Permission denied` on CI: restore exec bit in git + `chmod +x gradlew` step in both jobs
+- Actions refresh: `checkout@v5`, `setup-java@v5`; silence `sdkmanager --licenses` spam
+- No app-code changes vs v1.1.0 — same school-ready build, now actually shipping APKs
+
 ## v1.1.0 — School-ready (2026-09-06)
 
 Class-tested build. Local-first, no AI / no cloud yet (both Coming Soon).
