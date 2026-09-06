@@ -25,13 +25,13 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.ChangeHistory
 import androidx.compose.material.icons.filled.Circle
+import androidx.compose.material.icons.filled.CleaningServices
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.Hardware
 import androidx.compose.material.icons.filled.Highlight
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.InkEraser
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.NorthEast
 import androidx.compose.material.icons.filled.PanTool
@@ -184,7 +184,7 @@ fun EditorToolbar(
                 )
 
                 ToolIconButton(
-                    icon = Icons.Default.InkEraser,
+                    icon = Icons.Default.CleaningServices,
                     label = "Precision eraser",
                     isSelected = activeTool == ToolType.ERASER_PRECISION,
                     onClick = { onSelectTool(ToolType.ERASER_PRECISION) }
@@ -384,7 +384,7 @@ fun EditorToolbar(
                 )
 
                 ToolIconButton(
-                    icon = Icons.Default.InkEraser,
+                    icon = Icons.Default.CleaningServices,
                     label = "Precision",
                     isSelected = activeTool == ToolType.ERASER_PRECISION,
                     onClick = { onSelectTool(ToolType.ERASER_PRECISION) }

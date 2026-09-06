@@ -155,37 +155,6 @@ fun NoteEditorScreen(
     LaunchedEffect(savedAutoSnap) { autoCorrectionEnabled = savedAutoSnap }
     val aiSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
-    // Photo picker — insert textbook photos, whiteboard shots, diagrams
-    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        if (uri != null) {
-            coroutineScope.launch(Dispatchers.IO) {
-                val file = repository.importImageFromUri(uri)
-                if (file != null) {
-                    withContext(Dispatchers.Main) {
-                        pushUndoSnapshot()
-                        currentPhotos.add(
-                            PhotoAnnotation(
-                                filePath = file.absolutePath,
-                                x = 120f,
-                                y = 220f + (currentPhotos.size * 40f),
-                                width = 620f,
-                                height = 460f,
-                                layerId = activeLayerId
-                            )
-                        )
-                        saveActivePage()
-                        activeTool = ToolType.PEN_BALLPOINT
-                        Toast.makeText(context, "Photo added to page", Toast.LENGTH_SHORT).show()
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "Could not import that image", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            }
-        }
-    }
-
     // Text Editing State
     var pendingTextOffset by remember { mutableStateOf<Offset?>(null) }
     var editingTextBlock by remember { mutableStateOf<TextAnnotation?>(null) }
@@ -310,6 +279,38 @@ fun NoteEditorScreen(
         }
         saveActivePage()
         Toast.makeText(context, "Duplicated selection", Toast.LENGTH_SHORT).show()
+    }
+
+    // Photo picker — declared after save/push helpers so the callback can use them.
+    // Insert textbook photos, whiteboard shots, diagrams via system picker (no storage permission needed).
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                val file = repository.importImageFromUri(uri)
+                if (file != null) {
+                    withContext(Dispatchers.Main) {
+                        pushUndoSnapshot()
+                        currentPhotos.add(
+                            PhotoAnnotation(
+                                filePath = file.absolutePath,
+                                x = 120f,
+                                y = 220f + (currentPhotos.size * 40f),
+                                width = 620f,
+                                height = 460f,
+                                layerId = activeLayerId
+                            )
+                        )
+                        saveActivePage()
+                        activeTool = ToolType.PEN_BALLPOINT
+                        Toast.makeText(context, "Photo added to page", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(context, "Could not import that image", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
     }
 
     val activeTemplate = if (pagesState.isNotEmpty() && currentPageIndex in pagesState.indices) {
