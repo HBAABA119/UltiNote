@@ -17,6 +17,7 @@ import com.example.data.model.ShapeType
 import com.example.data.model.StrokePoint
 import com.example.data.model.TextAnnotation
 import com.example.data.model.ToolType
+import com.ultinote.app.R
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
