@@ -1,0 +1,7 @@
+{
+  "name": "UltiNote",
+  "description": "Liquid glass handwritten note-taking, PDF annotation, dynamic folders, and digital planner for Android and tablets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+
