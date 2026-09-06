@@ -1,0 +1,130 @@
+name: UltiNote Android CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build + Test (debug APK)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses + install platform 36
+        run: |
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Gradle wrapper validation
+        uses: gradle/actions/wrapper-validation@v4
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --console=plain --stacktrace
+        timeout-minutes: 20
+
+      - name: Assemble debug APK
+        run: ./gradlew :app:assembleDebug --console=plain --stacktrace
+        timeout-minutes: 20
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ultinote-debug
+          path: app/build/outputs/apk/debug/*.apk
+          retention-days: 14
+
+  release:
+    name: Signed release APK
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept licenses + install platform 36
+        run: |
+          yes | sdkmanager --licenses > /dev/null
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Decode keystore
+        env:
+          KEYSTORE_B64: ${{ secrets.UPLOAD_KEYSTORE_B64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > my-upload-key.jks
+          else
+            echo "No UPLOAD_KEYSTORE_B64 secret — building unsigned release."
+          fi
+
+      - name: Assemble release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: ./gradlew :app:assembleRelease --console=plain --stacktrace
+        timeout-minutes: 20
+
+      - name: Rename APK
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          ls app/build/outputs/apk/release/
+          cp app/build/outputs/apk/release/*.apk "UltiNote-${TAG}.apk"
+
+      - name: Build changelog
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          PREV=$(git describe --tags --abbrev=0 "${TAG}^" 2>/dev/null || echo "")
+          if [ -n "$PREV" ]; then
+            echo "## What's changed" > NOTES.md
+            git log --pretty="- %s (%h)" "${PREV}..${TAG}" >> NOTES.md
+          else
+            echo "## UltiNote ${TAG} — first tagged release" > NOTES.md
+            git log --pretty="- %s (%h)" -20 >> NOTES.md
+          fi
+          cat NOTES.md
+
+      - name: GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: UltiNote-*.apk
+          body_path: NOTES.md
+          generate_release_notes: true
