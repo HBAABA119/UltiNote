@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.3 — app-open crash fix (2026-09-06)
+
+Root cause of "won't open / app has a bug": the manifest's `.MainActivity` resolved to `com.ultinote.app.MainActivity`, but the code still lived in package `com.example` — the launcher activity class didn't exist, so the app crashed the instant you tapped the icon.
+- Moved every source set to `com.ultinote.app` (main, unit tests, instrumented tests) — namespace, applicationId, and code package finally agree
+- ⚠️ Uninstall any older copy first, then install v1.1.3 (appId/signature changed across these releases)
+
 ## v1.1.2 — "App not installed" fix (2026-09-06)
 
 Root cause: release APKs were built **unsigned** (no keystore in CI) and Android refuses to install unsigned APKs.

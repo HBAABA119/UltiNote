@@ -92,7 +92,7 @@ UltiNote uses scoped storage + the system file picker, so on Android 10+ it need
 ## Project layout (for nerds)
 
 ```
-app/src/main/java/com/example/
+app/src/main/java/com/ultinote/app/
   canvas/       ink engine (NoteCanvasView, splines, shape snap, ruler, paper)
   data/model/   Room entities + PhotoAnnotation, StickerCatalog, PressureSensitivity
   data/local/   Room DB (ultinote_notes.db v2) + DataStore prefs
