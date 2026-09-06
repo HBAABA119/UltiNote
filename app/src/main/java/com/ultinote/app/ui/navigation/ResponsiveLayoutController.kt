@@ -1,14 +1,19 @@
 package com.ultinote.app.ui.navigation
 
 import android.content.res.Configuration
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -58,8 +63,10 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ultinote.app.ui.components.nativePressable
 import com.ultinote.app.ui.theme.LiquidGlassTheme
 import com.ultinote.app.ui.theme.LocalKomorebiPalette
+import com.ultinote.app.ui.theme.NativeMotion
 import com.ultinote.app.util.HapticFeedbackManager
 import com.ultinote.app.util.rememberHapticFeedbackManager
 
@@ -77,6 +84,7 @@ enum class NavDestination(val label: String, val icon: ImageVector) {
  */
 @Composable
 fun ResponsiveNavigationScaffold(
+    showNavigation: Boolean = true,
     currentDestination: NavDestination = NavDestination.LIBRARY,
     onNavigate: (NavDestination) -> Unit,
     onQuickCreateNote: () -> Unit,
@@ -86,7 +94,11 @@ fun ResponsiveNavigationScaffold(
 ) {
     val configuration = LocalConfiguration.current
     val palette = LocalKomorebiPalette.current
-    val glassStyle = LiquidGlassTheme.current
+
+    if (!showNavigation) {
+        content(false)
+        return
+    }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE || maxWidth > maxHeight
@@ -220,7 +232,7 @@ fun TranslucentGlassPillSidebar(
                             letterSpacing = 0.5.sp
                         )
                         Text(
-                            text = "Liquid Glass",
+                            text = "Native Studio",
                             style = MaterialTheme.typography.labelSmall,
                             color = palette.colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
@@ -233,7 +245,7 @@ fun TranslucentGlassPillSidebar(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(CircleShape)
-                        .clickable(onClick = onQuickCreateNote)
+                        .nativePressable(scaleDown = 0.94f, onClick = onQuickCreateNote)
                         .border(1.dp, palette.glassHighlight, CircleShape),
                     color = palette.colorScheme.primary,
                     shape = CircleShape,
@@ -282,13 +294,19 @@ fun TranslucentGlassPillSidebar(
                             Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
                         }
 
+                        val indicatorAlpha by animateFloatAsState(
+                            targetValue = if (isSelected) 1f else 0f,
+                            animationSpec = NativeMotion.navSpring,
+                            label = "sidebarIndicator"
+                        )
+
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(itemShape)
-                                .clickable { onNavigate(dest) }
+                                .nativePressable(scaleDown = 0.97f, onClick = { onNavigate(dest) })
                                 .border(if (isSelected) 1.2.dp else 0.dp, itemBorder, itemShape),
-                            color = if (isSelected) palette.colorScheme.primaryContainer.copy(alpha = 0.45f) else Color.Transparent,
+                            color = palette.colorScheme.primaryContainer.copy(alpha = 0.45f * indicatorAlpha),
                             shape = itemShape
                         ) {
                             Row(
@@ -296,12 +314,21 @@ fun TranslucentGlassPillSidebar(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(12.dp)
                             ) {
-                                Icon(
-                                    imageVector = dest.icon,
-                                    contentDescription = dest.label,
-                                    tint = if (isSelected) palette.colorScheme.primary else palette.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                AnimatedContent(
+                                    targetState = isSelected,
+                                    transitionSpec = {
+                                        (scaleIn(initialScale = 0.85f) + fadeIn())
+                                            .togetherWith(scaleOut() + fadeOut())
+                                    },
+                                    label = "sidebarIcon"
+                                ) { selected ->
+                                    Icon(
+                                        imageVector = dest.icon,
+                                        contentDescription = dest.label,
+                                        tint = if (selected) palette.colorScheme.primary else palette.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(if (selected) 22.dp else 20.dp)
+                                    )
+                                }
                                 Text(
                                     text = dest.label,
                                     style = MaterialTheme.typography.bodyMedium,
@@ -369,16 +396,16 @@ fun TranslucentGlassBottomBar(
 ) {
     val palette = LocalKomorebiPalette.current
     val glassStyle = LiquidGlassTheme.current
-    val barShape = RoundedCornerShape(50.dp)
+    val barShape = RoundedCornerShape(28.dp)
 
     Surface(
         modifier = modifier
             .fillMaxWidth()
             .shadow(
-                elevation = 14.dp,
+                elevation = 16.dp,
                 shape = barShape,
                 spotColor = glassStyle.edgeGlowColor,
-                ambientColor = glassStyle.edgeGlowColor.copy(alpha = 0.12f)
+                ambientColor = glassStyle.edgeGlowColor.copy(alpha = 0.16f)
             )
             .border(1.2.dp, glassStyle.borderBrush, barShape),
         shape = barShape,
@@ -388,23 +415,29 @@ fun TranslucentGlassBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(glassStyle.surfaceBrush)
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
             NavDestination.values().forEach { dest ->
                 val isSelected = currentDestination == dest
 
-                val itemShape = RoundedCornerShape(24.dp)
+                val itemShape = RoundedCornerShape(20.dp)
+                val pillWidth by animateDpAsState(
+                    targetValue = if (isSelected) 104.dp else 46.dp,
+                    animationSpec = NativeMotion.layoutSpringDp,
+                    label = "bottomNavPill"
+                )
                 Surface(
                     modifier = Modifier
+                        .width(pillWidth)
                         .clip(itemShape)
-                        .clickable { onNavigate(dest) },
-                    color = if (isSelected) palette.colorScheme.primaryContainer.copy(alpha = 0.5f) else Color.Transparent,
+                        .nativePressable(scaleDown = 0.92f, onClick = { onNavigate(dest) }),
+                    color = if (isSelected) palette.colorScheme.primaryContainer.copy(alpha = 0.65f) else Color.Transparent,
                     shape = itemShape
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                        modifier = Modifier.padding(horizontal = if (isSelected) 12.dp else 10.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
@@ -414,7 +447,11 @@ fun TranslucentGlassBottomBar(
                             tint = if (isSelected) palette.colorScheme.primary else palette.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(20.dp)
                         )
-                        if (isSelected) {
+                        AnimatedVisibility(
+                            visible = isSelected,
+                            enter = fadeIn(NativeMotion.fast) + scaleIn(initialScale = 0.8f),
+                            exit = fadeOut(NativeMotion.fast) + scaleOut()
+                        ) {
                             Text(
                                 text = dest.label,
                                 style = MaterialTheme.typography.labelMedium,
@@ -430,22 +467,22 @@ fun TranslucentGlassBottomBar(
             Surface(
                 modifier = Modifier
                     .clip(CircleShape)
-                    .clickable(onClick = onQuickCreateNote)
-                    .border(1.dp, palette.glassHighlight, CircleShape),
+                    .nativePressable(scaleDown = 0.88f, onClick = onQuickCreateNote)
+                    .border(1.2.dp, palette.glassHighlight, CircleShape),
                 color = palette.colorScheme.primary,
                 shape = CircleShape,
-                shadowElevation = 4.dp
+                shadowElevation = 6.dp
             ) {
                 Box(
                     modifier = Modifier
-                        .size(38.dp),
+                        .size(42.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = Icons.Default.Add,
                         contentDescription = "New Note",
                         tint = Color.White,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }

@@ -50,6 +50,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -70,7 +72,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.graphics.graphicsLayer
 import com.ultinote.app.ui.theme.LocalKomorebiPalette
+import com.ultinote.app.ui.theme.NativeMotion
+import com.ultinote.app.util.rememberHapticFeedbackManager
 
 // Helper to map folder icon string names to SVG vector icons
 fun getFolderSvgIcon(iconName: String): ImageVector {
@@ -460,6 +465,14 @@ fun LiquidGlassPillButton(
     isPrimary: Boolean = false
 ) {
     val palette = LocalKomorebiPalette.current
+    val hapticManager = rememberHapticFeedbackManager()
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.94f else 1f,
+        animationSpec = NativeMotion.pressSpring,
+        label = "pillButtonScale"
+    )
     val shape = RoundedCornerShape(16.dp)
 
     val bg = if (isPrimary) palette.colorScheme.primary else palette.glassSurface
@@ -467,6 +480,10 @@ fun LiquidGlassPillButton(
 
     Row(
         modifier = modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .clip(shape)
             .background(bg)
             .border(
@@ -474,7 +491,14 @@ fun LiquidGlassPillButton(
                 if (isPrimary) Color.Transparent else palette.glassBorder,
                 shape
             )
-            .clickable(onClick = onClick)
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                onClick = {
+                    hapticManager.performButtonTapHaptic()
+                    onClick()
+                }
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center

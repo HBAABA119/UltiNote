@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Redo
 import androidx.compose.material.icons.filled.Square
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Undo
@@ -665,14 +666,30 @@ private fun ToolIconButton(
     onClick: () -> Unit
 ) {
     val palette = LocalKomorebiPalette.current
-    IconButton(
-        onClick = onClick,
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (isSelected) 1.05f else 1f,
+        animationSpec = com.ultinote.app.ui.theme.NativeMotion.pressSpring,
+        label = "toolScale"
+    )
+
+    Box(
         modifier = Modifier
-            .size(38.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .size(40.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(14.dp))
             .background(
                 if (isSelected) palette.colorScheme.primaryContainer else Color.Transparent
             )
+            .border(
+                if (isSelected) 1.2.dp else 0.dp,
+                if (isSelected) palette.colorScheme.primary.copy(alpha = 0.5f) else Color.Transparent,
+                RoundedCornerShape(14.dp)
+            )
+            .nativePressable(scaleDown = 0.90f, onClick = onClick),
+        contentAlignment = Alignment.Center
     ) {
         Icon(
             imageVector = icon,

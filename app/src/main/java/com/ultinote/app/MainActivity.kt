@@ -5,10 +5,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.core.view.WindowCompat
 import androidx.lifecycle.lifecycleScope
 import com.ultinote.app.data.local.KomorebiDatabase
 import com.ultinote.app.data.local.KomorebiRepository
@@ -50,10 +51,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MyApplicationTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = Color.Transparent
+                ) {
                     KomorebiNavGraph(repository = repository)
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
         }
     }
 }

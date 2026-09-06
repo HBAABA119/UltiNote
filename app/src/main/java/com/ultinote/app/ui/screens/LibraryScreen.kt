@@ -112,8 +112,15 @@ import com.ultinote.app.ui.components.LiquidGlassDialog
 import com.ultinote.app.ui.components.LiquidGlassFolderCard
 import com.ultinote.app.ui.components.LiquidGlassHomeWidgetsSection
 import com.ultinote.app.ui.components.LiquidGlassPillButton
+import com.ultinote.app.ui.components.NativeEmptyState
+import com.ultinote.app.ui.components.NativeLargeTopBar
+import com.ultinote.app.ui.components.NativeScreenBackground
+import com.ultinote.app.ui.components.NativeSearchBar
+import com.ultinote.app.ui.components.NativeSectionHeader
 import com.ultinote.app.ui.components.getFolderSvgIcon
+import com.ultinote.app.ui.components.nativePressable
 import com.ultinote.app.ui.theme.LocalKomorebiPalette
+import com.ultinote.app.ui.theme.rememberWindowSizeClass
 import com.ultinote.app.util.rememberHapticFeedbackManager
 import kotlinx.coroutines.launch
 import java.io.File
@@ -137,7 +144,10 @@ fun LibraryScreen(
     repository: KomorebiRepository,
     onOpenNote: (String) -> Unit,
     onNavigateToCalendar: () -> Unit,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    showEmbeddedNavigation: Boolean = true,
+    isLandscapeShell: Boolean = false,
+    scrollToFoldersTrigger: Int = 0
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -267,17 +277,11 @@ fun LibraryScreen(
 
     val activeFolder = allFolders.find { it.id == activeFolderId }
 
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(palette.ambientGradient)
-            )
-    ) {
-        val isTabletLandscape = maxWidth >= 600.dp
+    NativeScreenBackground {
+        val windowSize = rememberWindowSizeClass(maxWidth)
+        val isTabletLandscape = maxWidth >= 600.dp && showEmbeddedNavigation && !isLandscapeShell
 
         Row(modifier = Modifier.fillMaxSize()) {
-            // TABLET ADAPTIVE NAVIGATION: Sleek Liquid Glass Side Navigation Rail
             if (isTabletLandscape) {
                 Surface(
                     modifier = Modifier
@@ -416,92 +420,77 @@ fun LibraryScreen(
             }
 
             // Main Content Area
-            Scaffold(
-                modifier = Modifier.weight(1f),
-                containerColor = Color.Transparent,
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                if (activeFolder != null) {
-                                    IconButton(onClick = { activeFolderId = null }) {
-                                        Icon(
-                                            imageVector = Icons.Default.ArrowBack,
-                                            contentDescription = "Back to all folders",
-                                            tint = palette.colorScheme.onSurface
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                }
+            Column(modifier = Modifier.weight(1f)) {
+                NativeLargeTopBar(
+                    title = activeFolder?.name ?: "UltiNote",
+                    subtitle = "${displayedNotes.size} notes · ${allFolders.size} folders",
+                    navigationIcon = if (activeFolder != null) {
+                        {
+                            IconButton(onClick = { activeFolderId = null }) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowBack,
+                                    contentDescription = "Back to all folders",
+                                    tint = palette.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    } else null,
+                    actions = if (showEmbeddedNavigation && !isTabletLandscape) {
+                        {
+                            IconButton(onClick = { showCreateFolderDialog = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.CreateNewFolder,
+                                    contentDescription = "New Folder",
+                                    tint = palette.colorScheme.primary
+                                )
+                            }
+                            IconButton(onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }) {
+                                Icon(
+                                    imageVector = Icons.Default.PictureAsPdf,
+                                    contentDescription = "Import PDF",
+                                    tint = palette.colorScheme.primary
+                                )
+                            }
+                            IconButton(onClick = onNavigateToCalendar) {
+                                Icon(
+                                    imageVector = Icons.Default.CalendarMonth,
+                                    contentDescription = "Calendar",
+                                    tint = palette.colorScheme.onSurface
+                                )
+                            }
+                            IconButton(onClick = onNavigateToSettings) {
+                                Icon(
+                                    imageVector = Icons.Default.Settings,
+                                    contentDescription = "Settings",
+                                    tint = palette.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    } else if (!showEmbeddedNavigation) {
+                        {
+                            IconButton(onClick = { showCreateFolderDialog = true }) {
+                                Icon(
+                                    imageVector = Icons.Default.CreateNewFolder,
+                                    contentDescription = "New Folder",
+                                    tint = palette.colorScheme.primary
+                                )
+                            }
+                            IconButton(onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }) {
+                                Icon(
+                                    imageVector = Icons.Default.PictureAsPdf,
+                                    contentDescription = "Import PDF",
+                                    tint = palette.colorScheme.primary
+                                )
+                            }
+                        }
+                    } else null
+                )
 
-                                Column {
-                                    Text(
-                                        text = activeFolder?.name ?: "UltiNote Library",
-                                        style = MaterialTheme.typography.titleLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = palette.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "${displayedNotes.size} items • ${allFolders.size} folders",
-                                        fontSize = 12.sp,
-                                        color = palette.colorScheme.outline
-                                    )
-                                }
-                            }
-                        },
-                        actions = {
-                            if (!isTabletLandscape) {
-                                IconButton(onClick = { showCreateFolderDialog = true }) {
-                                    Icon(
-                                        imageVector = Icons.Default.CreateNewFolder,
-                                        contentDescription = "New Folder",
-                                        tint = palette.colorScheme.primary
-                                    )
-                                }
-                                IconButton(onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }) {
-                                    Icon(
-                                        imageVector = Icons.Default.PictureAsPdf,
-                                        contentDescription = "Import PDF",
-                                        tint = palette.colorScheme.primary
-                                    )
-                                }
-                                IconButton(onClick = onNavigateToCalendar) {
-                                    Icon(
-                                        imageVector = Icons.Default.CalendarMonth,
-                                        contentDescription = "Calendar",
-                                        tint = palette.colorScheme.onSurface
-                                    )
-                                }
-                                IconButton(onClick = onNavigateToSettings) {
-                                    Icon(
-                                        imageVector = Icons.Default.Settings,
-                                        contentDescription = "Settings",
-                                        tint = palette.colorScheme.onSurface
-                                    )
-                                }
-                            }
-                        },
-                        colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-                    )
-                },
-                floatingActionButton = {
-                    if (!isTabletLandscape) {
-                        LiquidGlassPillButton(
-                            text = "New Note",
-                            icon = Icons.Default.Add,
-                            onClick = { showCreateNoteDialog = true },
-                            isPrimary = true,
-                            modifier = Modifier.shadow(8.dp, RoundedCornerShape(16.dp))
-                        )
-                    }
-                }
-            ) { innerPadding ->
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(horizontal = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                        .padding(windowSize.contentPadding),
+                    verticalArrangement = Arrangement.spacedBy(windowSize.sectionSpacing)
                 ) {
                     // Document Storage Access Permission Banner
                     if (!hasFullStoragePermission) {
@@ -595,37 +584,12 @@ fun LibraryScreen(
                         )
                     }
 
-                    // Search & Filter Bar
                     item {
-                        LiquidGlassCard(
-                            shape = RoundedCornerShape(18.dp),
-                            backgroundColor = palette.glassSurface,
-                            elevation = 2.dp
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Search,
-                                    contentDescription = "Search",
-                                    tint = palette.colorScheme.outline,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
-                                OutlinedTextField(
-                                    value = searchQuery,
-                                    onValueChange = { searchQuery = it },
-                                    placeholder = { Text("Search notes, formulas, topics...", fontSize = 14.sp) },
-                                    singleLine = true,
-                                    modifier = Modifier.weight(1f),
-                                    colors = OutlinedTextFieldDefaults.colors(
-                                        focusedBorderColor = Color.Transparent,
-                                        unfocusedBorderColor = Color.Transparent
-                                    )
-                                )
+                        NativeSearchBar(
+                            query = searchQuery,
+                            onQueryChange = { searchQuery = it },
+                            placeholder = "Search notes, tags, topics…",
+                            trailingContent = {
                                 FilterChip(
                                     selected = filterOnlyFavorites,
                                     onClick = { filterOnlyFavorites = !filterOnlyFavorites },
@@ -642,24 +606,15 @@ fun LibraryScreen(
                                     )
                                 )
                             }
-                        }
+                        )
                     }
 
                     // FOLDERS SECTION (Displayed with Dynamic Visual Fill effect!)
                     if (activeFolderId == null) {
                         item {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = "FOLDERS & BINDERS",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp,
-                                    color = palette.colorScheme.primary
-                                )
+                            NativeSectionHeader(
+                                title = "Folders & binders",
+                                action = {
                                 TextButton(onClick = { showCreateFolderDialog = true }) {
                                     Icon(
                                         imageVector = Icons.Default.Add,
@@ -670,40 +625,22 @@ fun LibraryScreen(
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text("New Folder", fontSize = 12.sp, color = palette.colorScheme.primary)
                                 }
-                            }
+                                }
+                            )
 
                             if (allFolders.isEmpty()) {
-                                LiquidGlassCard(
-                                    shape = RoundedCornerShape(20.dp),
-                                    backgroundColor = palette.glassSurface,
-                                    elevation = 2.dp
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(24.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
+                                NativeEmptyState(
+                                    icon = {
                                         Icon(
                                             imageVector = Icons.Default.Folder,
                                             contentDescription = null,
                                             tint = palette.colorScheme.primary,
                                             modifier = Modifier.size(36.dp)
                                         )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            text = "No Folders Yet",
-                                            fontWeight = FontWeight.Bold,
-                                            style = MaterialTheme.typography.titleMedium,
-                                            color = palette.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = "Tap '+ New Folder' to organize your books, classes, and notes",
-                                            fontSize = 12.sp,
-                                            color = palette.colorScheme.outline
-                                        )
-                                    }
-                                }
+                                    },
+                                    title = "No folders yet",
+                                    message = "Create folders to organize classes, textbooks, and notes"
+                                )
                             } else {
                                 FlowRow(
                                     modifier = Modifier.fillMaxWidth(),
@@ -771,19 +708,9 @@ fun LibraryScreen(
 
                     // NOTES SECTION
                     item {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (activeFolder != null) "NOTES IN ${activeFolder.name.uppercase()}" else "RECENT NOTEBOOKS & PDFS",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.sp,
-                                color = palette.colorScheme.primary
-                            )
-
+                        NativeSectionHeader(
+                            title = if (activeFolder != null) "Notes in ${activeFolder.name}" else "Recent notebooks & PDFs",
+                            action = {
                             Row {
                                 TextButton(onClick = { pdfPickerLauncher.launch(arrayOf("application/pdf")) }) {
                                     Icon(
@@ -807,40 +734,22 @@ fun LibraryScreen(
                                     Text("New Note", fontSize = 12.sp, color = palette.colorScheme.primary)
                                 }
                             }
-                        }
+                            }
+                        )
 
                         if (displayedNotes.isEmpty()) {
-                            LiquidGlassCard(
-                                shape = RoundedCornerShape(20.dp),
-                                backgroundColor = palette.glassSurface,
-                                elevation = 2.dp
-                            ) {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(32.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
+                            NativeEmptyState(
+                                icon = {
                                     Icon(
                                         imageVector = Icons.Default.NoteAdd,
                                         contentDescription = null,
                                         tint = palette.colorScheme.primary,
                                         modifier = Modifier.size(40.dp)
                                     )
-                                    Spacer(modifier = Modifier.height(10.dp))
-                                    Text(
-                                        text = "No Notes Yet",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        color = palette.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "Create a handwritten notebook or import a PDF document to start taking notes",
-                                        fontSize = 12.sp,
-                                        color = palette.colorScheme.outline
-                                    )
-                                }
-                            }
+                                },
+                                title = "No notes yet",
+                                message = "Create a notebook or import a PDF to start studying"
+                            )
                         } else {
                             FlowRow(
                                 modifier = Modifier.fillMaxWidth(),
@@ -852,65 +761,74 @@ fun LibraryScreen(
 
                                     Box(
                                         modifier = Modifier
-                                            .width(185.dp)
-                                            .height(240.dp)
+                                            .width(windowSize.cardMinWidth)
+                                            .height(windowSize.noteCardHeight)
                                     ) {
                                         LiquidGlassCard(
-                                            shape = RoundedCornerShape(20.dp),
+                                            shape = RoundedCornerShape(24.dp),
                                             backgroundColor = palette.glassSurface,
+                                            elevation = 4.dp,
                                             modifier = Modifier
                                                 .fillMaxSize()
-                                                .clickable { onOpenNote(note.id) }
+                                                .nativePressable(scaleDown = 0.96f) { onOpenNote(note.id) }
                                         ) {
                                             Column(
                                                 modifier = Modifier
                                                     .fillMaxSize()
-                                                    .padding(12.dp),
+                                                    .padding(10.dp),
                                                 verticalArrangement = Arrangement.SpaceBetween
                                             ) {
                                                 // Cover Header
                                                 Box(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .height(120.dp)
-                                                        .clip(RoundedCornerShape(14.dp))
+                                                        .height(126.dp)
+                                                        .clip(RoundedCornerShape(18.dp))
                                                         .background(
                                                             Brush.linearGradient(
-                                                                if (note.isPdf) listOf(Color(0xFFE53935), Color(0xFFC62828))
+                                                                if (note.isPdf) listOf(Color(0xFFE53935), Color(0xFFB71C1C))
                                                                 else when (note.coverStyle) {
-                                                                    CoverStyle.BOTANICAL -> listOf(Color(0xFF4A6B56), Color(0xFF2E4537))
-                                                                    CoverStyle.SAKURA -> listOf(Color(0xFFC45A77), Color(0xFF8B3A50))
-                                                                    CoverStyle.CELESTIAL -> listOf(Color(0xFF6B58A3), Color(0xFF3F3268))
-                                                                    CoverStyle.LEATHER_BROWN -> listOf(Color(0xFF7A4F2E), Color(0xFF4A2F1A))
-                                                                    CoverStyle.MINIMAL_MATCHA -> listOf(Color(0xFF8DA399), Color(0xFF5F786C))
-                                                                    CoverStyle.LAVENDER_MIST -> listOf(Color(0xFFA594F9), Color(0xFF6E56CF))
-                                                                    CoverStyle.OBSIDIAN_SLATE -> listOf(Color(0xFF2B2F38), Color(0xFF16181D))
+                                                                    CoverStyle.BOTANICAL -> listOf(Color(0xFF4A6B56), Color(0xFF24362B))
+                                                                    CoverStyle.SAKURA -> listOf(Color(0xFFC45A77), Color(0xFF7A2E42))
+                                                                    CoverStyle.CELESTIAL -> listOf(Color(0xFF6B58A3), Color(0xFF332757))
+                                                                    CoverStyle.LEATHER_BROWN -> listOf(Color(0xFF7A4F2E), Color(0xFF3E2411))
+                                                                    CoverStyle.MINIMAL_MATCHA -> listOf(Color(0xFF8DA399), Color(0xFF4A6156))
+                                                                    CoverStyle.LAVENDER_MIST -> listOf(Color(0xFFA594F9), Color(0xFF5941C4))
+                                                                    CoverStyle.OBSIDIAN_SLATE -> listOf(Color(0xFF2B2F38), Color(0xFF101217))
                                                                 }
                                                             )
+                                                        )
+                                                        .border(
+                                                            0.8.dp,
+                                                            Brush.verticalGradient(
+                                                                listOf(Color.White.copy(alpha = 0.35f), Color.Transparent)
+                                                            ),
+                                                            RoundedCornerShape(18.dp)
                                                         )
                                                         .padding(10.dp)
                                                 ) {
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
                                                     ) {
                                                         if (note.isPdf) {
                                                             Box(
                                                                 modifier = Modifier
-                                                                    .clip(RoundedCornerShape(6.dp))
+                                                                    .clip(RoundedCornerShape(8.dp))
                                                                     .background(Color.White)
-                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                    .padding(horizontal = 7.dp, vertical = 2.dp)
                                                             ) {
-                                                                Text("PDF", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                                                                Text("PDF", fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, color = Color(0xFFC62828))
                                                             }
                                                         } else {
                                                             Box(
                                                                 modifier = Modifier
-                                                                    .clip(RoundedCornerShape(6.dp))
-                                                                    .background(Color.White.copy(alpha = 0.25f))
-                                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                                    .clip(RoundedCornerShape(8.dp))
+                                                                    .background(Color.White.copy(alpha = 0.22f))
+                                                                    .padding(horizontal = 7.dp, vertical = 2.dp)
                                                             ) {
-                                                                Text("${note.pageCount}p", fontSize = 10.sp, color = Color.White)
+                                                                Text("${note.pageCount}p", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color.White)
                                                             }
                                                         }
 
@@ -925,8 +843,8 @@ fun LibraryScreen(
                                                             Icon(
                                                                 imageVector = if (note.isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
                                                                 contentDescription = "Favorite",
-                                                                tint = if (note.isFavorite) Color(0xFFFFD700) else Color.White,
-                                                                modifier = Modifier.size(16.dp)
+                                                                tint = if (note.isFavorite) Color(0xFFFFD700) else Color.White.copy(alpha = 0.85f),
+                                                                modifier = Modifier.size(18.dp)
                                                             )
                                                         }
                                                     }
@@ -934,15 +852,15 @@ fun LibraryScreen(
                                                     Icon(
                                                         imageVector = if (note.isPdf) Icons.Default.PictureAsPdf else Icons.Default.MenuBook,
                                                         contentDescription = null,
-                                                        tint = Color.White.copy(alpha = 0.35f),
+                                                        tint = Color.White.copy(alpha = 0.32f),
                                                         modifier = Modifier
-                                                            .size(48.dp)
+                                                            .size(46.dp)
                                                             .align(Alignment.BottomEnd)
                                                     )
                                                 }
 
                                                 // Note Info
-                                                Column {
+                                                Column(modifier = Modifier.padding(horizontal = 2.dp, vertical = 2.dp)) {
                                                     Row(
                                                         modifier = Modifier.fillMaxWidth(),
                                                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -981,7 +899,7 @@ fun LibraryScreen(
 
                                                     Text(
                                                         text = SimpleDateFormat("MMM d, yyyy", Locale.getDefault()).format(Date(note.updatedAt)) +
-                                                                (if (note.tags.isNotBlank()) " • ${note.tags.take(28)}" else ""),
+                                                                (if (note.tags.isNotBlank()) " • ${note.tags.take(24)}" else ""),
                                                         fontSize = 11.sp,
                                                         maxLines = 1,
                                                         color = palette.colorScheme.outline
@@ -1043,7 +961,7 @@ fun LibraryScreen(
                     }
 
                     item {
-                        Spacer(modifier = Modifier.height(40.dp))
+                        Spacer(modifier = Modifier.height(24.dp))
                     }
                 }
             }

@@ -1,8 +1,6 @@
 package com.ultinote.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -24,17 +22,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.EventNote
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,28 +37,31 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.ultinote.app.data.local.KomorebiRepository
 import com.ultinote.app.data.model.CoverStyle
+import com.ultinote.app.data.model.NoteEntity
 import com.ultinote.app.data.model.PaperTemplate
 import com.ultinote.app.ui.components.LiquidGlassCard
 import com.ultinote.app.ui.components.LiquidGlassPillButton
+import com.ultinote.app.ui.components.NativeAnimatedDayCell
+import com.ultinote.app.ui.components.NativeLargeTopBar
+import com.ultinote.app.ui.components.nativePressable
 import com.ultinote.app.ui.theme.LocalKomorebiPalette
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CalendarPlannerScreen(
     repository: KomorebiRepository,
     onBack: () -> Unit,
-    onOpenNote: (String) -> Unit
+    onOpenNote: (String) -> Unit,
+    showBackNavigation: Boolean = true
 ) {
     val palette = LocalKomorebiPalette.current
     val coroutineScope = rememberCoroutineScope()
@@ -78,10 +73,12 @@ fun CalendarPlannerScreen(
     var selectedDay by remember { mutableIntStateOf(calendar.get(Calendar.DAY_OF_MONTH)) }
 
     val monthFormat = remember { SimpleDateFormat("MMMM yyyy", Locale.getDefault()) }
-    val currentMonthCalendar = Calendar.getInstance().apply {
-        set(Calendar.YEAR, displayedYear)
-        set(Calendar.MONTH, displayedMonth)
-        set(Calendar.DAY_OF_MONTH, 1)
+    val currentMonthCalendar = remember(displayedYear, displayedMonth) {
+        Calendar.getInstance().apply {
+            set(Calendar.YEAR, displayedYear)
+            set(Calendar.MONTH, displayedMonth)
+            set(Calendar.DAY_OF_MONTH, 1)
+        }
     }
 
     val daysInMonth = currentMonthCalendar.getActualMaximum(Calendar.DAY_OF_MONTH)
@@ -91,29 +88,15 @@ fun CalendarPlannerScreen(
 
     val notesForSelectedDate = allNotes.filter { note ->
         note.linkedDate == selectedDateString ||
-        SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(note.updatedAt) == selectedDateString
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(note.updatedAt) == selectedDateString
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.CalendarMonth,
-                            contentDescription = null,
-                            tint = palette.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Calendar Planner",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = palette.colorScheme.onSurface
-                        )
-                    }
-                },
-                navigationIcon = {
+    Column(modifier = Modifier.fillMaxSize()) {
+        NativeLargeTopBar(
+            title = "Calendar",
+            subtitle = "Plan study sessions by day",
+            navigationIcon = if (showBackNavigation) {
+                {
                     IconButton(onClick = onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
@@ -121,17 +104,14 @@ fun CalendarPlannerScreen(
                             tint = palette.colorScheme.onSurface
                         )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
-        },
-        containerColor = Color.Transparent
-    ) { innerPadding ->
+                }
+            } else null
+        )
+
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Brush.verticalGradient(palette.ambientGradient))
-                .padding(innerPadding)
+                .padding(start = 48.dp, end = 48.dp, bottom = 84.dp)
         ) {
             val isTabletWide = maxWidth >= 650.dp
 
@@ -320,7 +300,7 @@ private fun CalendarGridContent(
     daysInMonth: Int,
     startDayOfWeek: Int,
     selectedDay: Int,
-    allNotes: List<com.ultinote.app.data.model.NoteEntity>,
+    allNotes: List<NoteEntity>,
     onMonthPrev: () -> Unit,
     onMonthNext: () -> Unit,
     onSelectDay: (Int) -> Unit
@@ -388,33 +368,12 @@ private fun CalendarGridContent(
                         val slotDateStr = String.format(Locale.getDefault(), "%04d-%02d-%02d", displayedYear, displayedMonth + 1, dayNum)
                         val hasNotes = allNotes.any { it.linkedDate == slotDateStr }
 
-                        Box(
-                            modifier = Modifier
-                                .size(38.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    if (isSelected) palette.colorScheme.primary else Color.Transparent
-                                )
-                                .clickable { onSelectDay(dayNum) },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text(
-                                    text = "$dayNum",
-                                    fontSize = 13.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                    color = if (isSelected) Color.White else palette.colorScheme.onSurface
-                                )
-                                if (hasNotes) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(4.dp)
-                                            .clip(CircleShape)
-                                            .background(if (isSelected) Color.White else palette.colorScheme.primary)
-                                    )
-                                }
-                            }
-                        }
+                        NativeAnimatedDayCell(
+                            dayNum = dayNum,
+                            isSelected = isSelected,
+                            hasNotes = hasNotes,
+                            onClick = { onSelectDay(dayNum) }
+                        )
                     } else {
                         Spacer(modifier = Modifier.size(38.dp))
                     }
@@ -426,7 +385,7 @@ private fun CalendarGridContent(
 
 @Composable
 private fun NotesListContent(
-    notes: List<com.ultinote.app.data.model.NoteEntity>,
+    notes: List<NoteEntity>,
     selectedDateString: String,
     onOpenNote: (String) -> Unit
 ) {
@@ -440,16 +399,36 @@ private fun NotesListContent(
             item {
                 LiquidGlassCard(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(20.dp),
                     backgroundColor = palette.glassSurface,
-                    elevation = 1.dp
+                    elevation = 2.dp
                 ) {
-                    Text(
-                        text = "No study notes logged for $selectedDateString.\nTap 'New Day Planner' to create a weekly/daily planner page.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = palette.colorScheme.outline,
-                        modifier = Modifier.padding(18.dp)
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.EventNote,
+                            contentDescription = null,
+                            tint = palette.colorScheme.outline,
+                            modifier = Modifier.size(36.dp)
+                        )
+                        Text(
+                            text = "No notes scheduled",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = palette.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Tap '+ New Day Planner' to log study goals or lectures for $selectedDateString.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = palette.colorScheme.outline,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
         } else {
@@ -457,19 +436,21 @@ private fun NotesListContent(
                 LiquidGlassCard(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onOpenNote(note.id) },
-                    shape = RoundedCornerShape(16.dp),
+                        .nativePressable(scaleDown = 0.96f) { onOpenNote(note.id) },
+                    shape = RoundedCornerShape(20.dp),
                     backgroundColor = palette.glassSurface,
-                    elevation = 2.dp
+                    elevation = 3.dp
                 ) {
                     Row(
-                        modifier = Modifier.padding(14.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(40.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(14.dp))
                                 .background(palette.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
@@ -477,20 +458,22 @@ private fun NotesListContent(
                                 imageVector = Icons.Default.EventNote,
                                 contentDescription = null,
                                 tint = palette.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
+                                modifier = Modifier.size(22.dp)
                             )
                         }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
                             Text(
                                 text = note.title,
-                                style = MaterialTheme.typography.bodyMedium,
+                                style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = palette.colorScheme.onSurface
+                                color = palette.colorScheme.onSurface,
+                                maxLines = 1
                             )
+                            Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "${note.pageCount} pages • ${note.defaultTemplate.name.replace("_", " ")}",
-                                fontSize = 11.sp,
+                                fontSize = 12.sp,
                                 color = palette.colorScheme.outline
                             )
                         }
