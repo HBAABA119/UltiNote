@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.1.2 — "App not installed" fix (2026-09-06)
+
+Root cause: release APKs were built **unsigned** (no keystore in CI) and Android refuses to install unsigned APKs.
+- Generated a proper upload key (`RSA-2048, 30y`) and stored it as CI secrets (`UPLOAD_KEYSTORE_B64` / `STORE_PASSWORD` / `KEY_PASSWORD`) — every release from v1.1.2 on is signed with the same key, so updates install cleanly
+- Release builds now fall back to debug signing instead of shipping unsigned — a release APK can never be uninstallable again
+- ⚠️ One-time step: **uninstall any old UltiNote first**, then install v1.1.2 (signatures changed, Android blocks "updates" across different keys)
+
 ## v1.1.1 — CI green + release pipeline (2026-09-06)
 
 - Fix `gradlew: Permission denied` on CI: restore exec bit in git + `chmod +x gradlew` step in both jobs

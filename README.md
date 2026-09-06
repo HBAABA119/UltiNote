@@ -55,6 +55,7 @@ That's UltiNote. Local-first, handwriting-first, made for real school life — p
 1. Go to Releases → download the latest `UltiNote-v*.apk`
 2. Open it on your phone/tablet → allow install → done
 3. Works on Android 7.0 (API 24) and up. Stylus optional but lovely.
+4. Seeing "App not installed"? Uninstall any older UltiNote copy first (the signing key changed in v1.1.2), then install fresh. Your notes live in app storage — back up any export PDFs first if you have them.
 
 **Build it yourself:**
 ```bash

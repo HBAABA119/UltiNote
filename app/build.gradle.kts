@@ -17,8 +17,8 @@ android {
     applicationId = "com.ultinote.app"
     minSdk = 24
     targetSdk = 36
-    versionCode = 3
-    versionName = "1.1.1"
+    versionCode = 4
+    versionName = "1.1.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
@@ -26,14 +26,16 @@ android {
   signingConfigs {
     // Release signing only when CI provides a keystore. Local builds fall back to debug signing
     // so `./gradlew assembleDebug` just works on a fresh clone.
+    // NOTE: all three must be present or AGP fails with "missing required property".
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      val keystoreFile = file(keystorePath)
-      if (keystoreFile.exists()) {
+      val keystoreFile = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks")
+      val storePass = System.getenv("STORE_PASSWORD")
+      val keyPass = System.getenv("KEY_PASSWORD")
+      if (keystoreFile.exists() && !storePass.isNullOrEmpty() && !keyPass.isNullOrEmpty()) {
         storeFile = keystoreFile
-        storePassword = System.getenv("STORE_PASSWORD")
+        storePassword = storePass
         keyAlias = "upload"
-        keyPassword = System.getenv("KEY_PASSWORD")
+        keyPassword = keyPass
       }
     }
   }
@@ -43,11 +45,16 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      // Only attach release signing when the keystore actually exists (CI). Otherwise keep
-      // the default debug signing so local + CI assembleRelease never hard-fail.
+      // Prefer the real upload key (CI secret). Fall back to the auto-generated debug key
+      // so a release APK is NEVER unsigned — unsigned APKs fail to install with "App not installed".
       val keystoreFile = file(System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks")
-      if (keystoreFile.exists()) {
-        signingConfig = signingConfigs.getByName("release")
+      val hasUploadKey = keystoreFile.exists() &&
+        !System.getenv("STORE_PASSWORD").isNullOrEmpty() &&
+        !System.getenv("KEY_PASSWORD").isNullOrEmpty()
+      signingConfig = if (hasUploadKey) {
+        signingConfigs.getByName("release")
+      } else {
+        signingConfigs.getByName("debug")
       }
     }
   }
