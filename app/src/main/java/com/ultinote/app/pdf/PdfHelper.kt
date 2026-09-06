@@ -460,6 +460,200 @@ object PdfHelper {
     }
 
     /**
+     * Draw one notebook page (paper + ink + shapes + text + stickers + photos)
+     * onto any android Canvas. Shared by PDF export and PNG snapshot export so
+     * both always look identical.
+     */
+    fun drawPageSnapshot(canvas: Canvas, pageEntity: PageEntity, w: Float, h: Float) {
+        val bgPaint = Paint().apply {
+            color = Color.parseColor("#FDFBF7")
+            style = Paint.Style.FILL
+        }
+        canvas.drawRect(0f, 0f, w, h, bgPaint)
+        drawTemplateOnCanvas(canvas, pageEntity.template, w, h)
+
+        val textBlocks = SerializationHelpers.jsonToTextBlocks(pageEntity.textBlocksJson)
+        for (tb in textBlocks) {
+            val tPaint = Paint().apply {
+                color = (tb.color and 0xFFFFFFFFL).toInt()
+                textSize = tb.fontSize * 1.35f
+                isFakeBoldText = tb.isBold
+                isAntiAlias = true
+            }
+            val lines = tb.text.split("\n")
+            var yOff = tb.y
+            for (line in lines) {
+                canvas.drawText(line, tb.x, yOff, tPaint)
+                yOff += tb.fontSize * 1.4f
+            }
+        }
+
+        val shapes = SerializationHelpers.jsonToShapes(pageEntity.shapesJson)
+        for (shape in shapes) {
+            val sPaint = Paint().apply {
+                color = (shape.color and 0xFFFFFFFFL).toInt()
+                strokeWidth = shape.strokeWidth * 1.25f
+                style = if (shape.isFilled) Paint.Style.FILL else Paint.Style.STROKE
+                isAntiAlias = true
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+            }
+            when (shape.type) {
+                ShapeType.LINE -> canvas.drawLine(shape.startX, shape.startY, shape.endX, shape.endY, sPaint)
+                ShapeType.RECTANGLE -> {
+                    canvas.drawRect(
+                        minOf(shape.startX, shape.endX), minOf(shape.startY, shape.endY),
+                        maxOf(shape.startX, shape.endX), maxOf(shape.startY, shape.endY), sPaint
+                    )
+                }
+                ShapeType.CIRCLE -> {
+                    val radius = Math.hypot(
+                        (shape.endX - shape.startX).toDouble(),
+                        (shape.endY - shape.startY).toDouble()
+                    ).toFloat() / 2f
+                    canvas.drawCircle((shape.startX + shape.endX) / 2f, (shape.startY + shape.endY) / 2f, radius, sPaint)
+                }
+                ShapeType.TRIANGLE -> {
+                    val path = android.graphics.Path().apply {
+                        val apexX = (shape.startX + shape.endX) / 2f
+                        moveTo(apexX, shape.startY)
+                        lineTo(shape.endX, shape.endY)
+                        lineTo(shape.startX, shape.endY)
+                        close()
+                    }
+                    canvas.drawPath(path, sPaint)
+                }
+                ShapeType.ARROW -> {
+                    canvas.drawLine(shape.startX, shape.startY, shape.endX, shape.endY, sPaint)
+                    val angle = Math.atan2(
+                        (shape.endY - shape.startY).toDouble(),
+                        (shape.endX - shape.startX).toDouble()
+                    )
+                    val arrowHeadLen = 28f
+                    val arrowAngle = Math.PI / 6.0
+                    val x1 = (shape.endX - arrowHeadLen * Math.cos(angle - arrowAngle)).toFloat()
+                    val y1 = (shape.endY - arrowHeadLen * Math.sin(angle - arrowAngle)).toFloat()
+                    val x2 = (shape.endX - arrowHeadLen * Math.cos(angle + arrowAngle)).toFloat()
+                    val y2 = (shape.endY - arrowHeadLen * Math.sin(angle + arrowAngle)).toFloat()
+                    canvas.drawLine(shape.endX, shape.endY, x1, y1, sPaint)
+                    canvas.drawLine(shape.endX, shape.endY, x2, y2, sPaint)
+                }
+                ShapeType.STAR -> {
+                    val cx = (shape.startX + shape.endX) / 2f
+                    val cy = (shape.startY + shape.endY) / 2f
+                    val outerR = Math.hypot(
+                        (shape.endX - shape.startX).toDouble(),
+                        (shape.endY - shape.startY).toDouble()
+                    ).toFloat() / 2f
+                    val innerR = outerR * 0.45f
+                    val path = android.graphics.Path()
+                    for (i in 0 until 10) {
+                        val r = if (i % 2 == 0) outerR else innerR
+                        val theta = i * Math.PI / 5.0 - Math.PI / 2.0
+                        val px = cx + (r * Math.cos(theta)).toFloat()
+                        val py = cy + (r * Math.sin(theta)).toFloat()
+                        if (i == 0) path.moveTo(px, py) else path.lineTo(px, py)
+                    }
+                    path.close()
+                    canvas.drawPath(path, sPaint)
+                }
+            }
+        }
+
+        val stickers = SerializationHelpers.jsonToStickers(pageEntity.stickersJson)
+        for (st in stickers) {
+            val glyph = com.ultinote.app.data.model.StickerCatalog.glyphFor(st.stickerKey)
+            val sPaint = Paint().apply {
+                textSize = 28f * st.scale
+                isAntiAlias = true
+            }
+            canvas.drawText(glyph, st.x, st.y, sPaint)
+        }
+
+        try {
+            val photos = SerializationHelpers.jsonToPhotos(pageEntity.imagesJson)
+            for (ph in photos) {
+                val f = File(ph.filePath)
+                if (f.exists()) {
+                    val bmp = android.graphics.BitmapFactory.decodeFile(f.absolutePath)
+                    if (bmp != null) {
+                        val dst = android.graphics.RectF(ph.x, ph.y, ph.x + ph.width, ph.y + ph.height)
+                        canvas.drawBitmap(bmp, null, dst, Paint().apply { isAntiAlias = true; isFilterBitmap = true })
+                        if (!bmp.isRecycled) bmp.recycle()
+                    }
+                }
+            }
+        } catch (_: Exception) {
+        }
+
+        val strokes = SerializationHelpers.jsonToStrokes(pageEntity.strokesJson)
+        for (stroke in strokes) {
+            if (stroke.points.size < 2) continue
+            val strokePaint = Paint().apply {
+                color = (stroke.color and 0xFFFFFFFFL).toInt()
+                style = Paint.Style.STROKE
+                strokeCap = Paint.Cap.ROUND
+                strokeJoin = Paint.Join.ROUND
+                isAntiAlias = true
+                if (stroke.isHighlighter) {
+                    alpha = (stroke.alpha * 255).toInt().coerceIn(30, 200)
+                }
+            }
+            for (i in 0 until stroke.points.size - 1) {
+                val p1 = stroke.points[i]
+                val p2 = stroke.points[i + 1]
+                val avgPressure = (p1.pressure + p2.pressure) / 2f
+                strokePaint.strokeWidth = calculatePressureWidth(stroke.strokeWidth, avgPressure, stroke.toolType)
+                canvas.drawLine(p1.x, p1.y, p2.x, p2.y, strokePaint)
+            }
+        }
+    }
+
+    /** Snapshot the visible page to PNG (homework portals want images, not PDFs). */
+    suspend fun exportPageToPng(
+        context: Context,
+        noteTitle: String,
+        page: PageEntity,
+        pageNumber: Int,
+        pageWidth: Int = 1200,
+        pageHeight: Int = 1696
+    ): File = withContext(Dispatchers.IO) {
+        val exportDir = File(context.getExternalFilesDir(null) ?: context.filesDir, "UltiNoteExports")
+        if (!exportDir.exists()) exportDir.mkdirs()
+        val cleanTitle = noteTitle.replace("[^a-zA-Z0-9_-]".toRegex(), "_")
+        val out = File(exportDir, "${cleanTitle}_p${pageNumber}_${System.currentTimeMillis()}.png")
+        val bmp = Bitmap.createBitmap(pageWidth, pageHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        drawPageSnapshot(canvas, page, pageWidth.toFloat(), pageHeight.toFloat())
+        FileOutputStream(out).use { fos ->
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, fos)
+            fos.flush()
+        }
+        if (!bmp.isRecycled) bmp.recycle()
+        out
+    }
+
+    fun shareImageFile(context: Context, file: File, noteTitle: String) {
+        try {
+            val authority = "${context.packageName}.fileprovider"
+            val contentUri = androidx.core.content.FileProvider.getUriForFile(context, authority, file)
+            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "image/png"
+                putExtra(android.content.Intent.EXTRA_STREAM, contentUri)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, noteTitle)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            val chooser = android.content.Intent.createChooser(shareIntent, "Share page as image").apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            android.widget.Toast.makeText(context, "Error sharing image: ${e.localizedMessage}", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /**
      * Share exported PDF document via Android System Share Sheet
      */
     fun sharePdfFile(context: Context, file: File, noteTitle: String) {

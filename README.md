@@ -10,13 +10,16 @@ That's UltiNote. Local-first, handwriting-first, made for real school life — p
 
 ---
 
-## What it actually does (v1.1.0)
+## What it actually does (v1.2.0)
 
 **Write like paper**
 - Ballpoint / fountain / brush pens with real pressure response (S-Pen, USI, generic active stylus)
+- **Tidy handwriting** (Subtle by default): de-wobbles invisibly in *any* language — Urdu, Arabic, German, math. Strong mode also straightens lines. Off keeps raw ink.
+- **Convert to text** (opt-in): lasso your writing → Convert → typed text appears, ink stays. 27 on-device languages, English built in, rest download once then work offline.
 - Highlighter that behaves like a highlighter, not a marker
 - Palm rejection toggle — fingers pan + zoom, stylus writes
 - S-Pen barrel-button eraser just works
+- **Two-finger tap = undo, three-finger tap = redo**, anywhere
 - Pressure feel setting: Soft / Medium / Firm (Settings → Tablet & Stylus)
 - Auto shape snap for circles, lines, rectangles when your handwriting is shaky at 8am
 
@@ -27,8 +30,9 @@ That's UltiNote. Local-first, handwriting-first, made for real school life — p
 - Layers with opacity + blend modes if you're doing diagrams
 
 **PDFs from teachers**
+- **Read mode vs Draw mode**: read scrolls + zooms like a proper book (double-tap zooms), draw inks. One switch, no more accidental marks.
 - Import any PDF → it becomes a notebook, one page per PDF page
-- Draw right on top, export the whole thing back to a clean HQ PDF and share it
+- Draw right on top, export the whole thing back to a clean HQ PDF and share it — or **share any single page as an image** for homework portals
 - Thumbnails to jump pages, plus Duplicate / ◀ ▶ reorder, delete, add blank pages
 
 **Photos + stickers**
@@ -102,7 +106,7 @@ app/src/main/java/com/ultinote/app/
   ui/theme/     6 palettes + glass theme + fonts
 ```
 
-Stack: Kotlin 2.2, Compose (BOM 2026.04.01), Room 2.8.1 + KSP, DataStore, Navigation-Compose, PdfRenderer. Min SDK 24, target/compile 36.
+Stack: Kotlin 2.2, Compose (BOM 2026.04.01), Room 2.8.1 + KSP, DataStore, Navigation-Compose, PdfRenderer, ML Kit Digital Ink 19.0.0. Min SDK 24, target/compile 36.
 
 ---
 

@@ -34,6 +34,9 @@ class UserPreferencesRepository(private val context: Context) {
         private val KEY_AUTO_SNAP = booleanPreferencesKey("auto_snap")
         private val KEY_PRESSURE = floatPreferencesKey("pressure_mult")
         private val KEY_SEEN_ONBOARDING = booleanPreferencesKey("seen_onboarding")
+        private val KEY_TIDY = stringPreferencesKey("tidy_level")
+        private val KEY_CONVERT_LANG = stringPreferencesKey("convert_lang")
+        private val KEY_LEFT_HANDED = booleanPreferencesKey("left_handed")
     }
 
     val theme: Flow<AppThemeOption> = context.ultinotePrefs.data.map { p ->
@@ -53,6 +56,13 @@ class UserPreferencesRepository(private val context: Context) {
     val autoSnap: Flow<Boolean> = context.ultinotePrefs.data.map { it[KEY_AUTO_SNAP] ?: true }
     val pressureMult: Flow<Float> = context.ultinotePrefs.data.map { it[KEY_PRESSURE] ?: 1.0f }
     val seenOnboarding: Flow<Boolean> = context.ultinotePrefs.data.map { it[KEY_SEEN_ONBOARDING] ?: false }
+    val tidyLevel: Flow<com.ultinote.app.canvas.TidyLevel> = context.ultinotePrefs.data.map { p ->
+        try {
+            com.ultinote.app.canvas.TidyLevel.valueOf(p[KEY_TIDY] ?: com.ultinote.app.canvas.TidyLevel.SUBTLE.name)
+        } catch (_: Exception) { com.ultinote.app.canvas.TidyLevel.SUBTLE }
+    }
+    val convertLang: Flow<String> = context.ultinotePrefs.data.map { it[KEY_CONVERT_LANG] ?: "en" }
+    val leftHanded: Flow<Boolean> = context.ultinotePrefs.data.map { it[KEY_LEFT_HANDED] ?: false }
 
     suspend fun setTheme(t: AppThemeOption) = context.ultinotePrefs.edit { it[KEY_THEME] = t.name }
     suspend fun setFont(f: AppFontOption) = context.ultinotePrefs.edit { it[KEY_FONT] = f.name }
@@ -61,4 +71,7 @@ class UserPreferencesRepository(private val context: Context) {
     suspend fun setAutoSnap(v: Boolean) = context.ultinotePrefs.edit { it[KEY_AUTO_SNAP] = v }
     suspend fun setPressureMult(v: Float) = context.ultinotePrefs.edit { it[KEY_PRESSURE] = v.coerceIn(0.4f, 2.0f) }
     suspend fun setSeenOnboarding(v: Boolean) = context.ultinotePrefs.edit { it[KEY_SEEN_ONBOARDING] = v }
+    suspend fun setTidyLevel(v: com.ultinote.app.canvas.TidyLevel) = context.ultinotePrefs.edit { it[KEY_TIDY] = v.name }
+    suspend fun setConvertLang(tag: String) = context.ultinotePrefs.edit { it[KEY_CONVERT_LANG] = tag }
+    suspend fun setLeftHanded(v: Boolean) = context.ultinotePrefs.edit { it[KEY_LEFT_HANDED] = v }
 }

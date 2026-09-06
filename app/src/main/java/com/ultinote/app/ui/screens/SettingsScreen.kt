@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.Storage
 import androidx.compose.material.icons.filled.TabletAndroid
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -59,11 +61,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ultinote.app.canvas.TidyLevel
 import com.ultinote.app.data.local.KomorebiRepository
 import com.ultinote.app.data.local.UserPreferencesRepository
 import com.ultinote.app.data.model.AppThemeOption
 import com.ultinote.app.data.model.PaperTemplate
 import com.ultinote.app.data.model.PressureSensitivity
+import com.ultinote.app.ink.ConvertLanguages
 import com.ultinote.app.ui.theme.AppFontOption
 import com.ultinote.app.ui.theme.FontRepository
 import com.ultinote.app.ui.theme.LocalKomorebiPalette
@@ -87,10 +91,16 @@ fun SettingsScreen(
     val savedSmoothing by prefs.smoothing.collectAsState(initial = true)
     val savedAutoSnap by prefs.autoSnap.collectAsState(initial = true)
     val savedPressure by prefs.pressureMult.collectAsState(initial = 1.0f)
+    val savedTidy by prefs.tidyLevel.collectAsState(initial = TidyLevel.SUBTLE)
+    val savedConvertLang by prefs.convertLang.collectAsState(initial = "en")
+    val savedLefty by prefs.leftHanded.collectAsState(initial = false)
 
     var stylusOnlyDefault by remember(savedStylus) { mutableStateOf(savedStylus) }
     var highPrecisionSmoothing by remember(savedSmoothing) { mutableStateOf(savedSmoothing) }
     var autoSnapDefault by remember(savedAutoSnap) { mutableStateOf(savedAutoSnap) }
+    var leftHanded by remember(savedLefty) { mutableStateOf(savedLefty) }
+    var tidyLevel by remember(savedTidy) { mutableStateOf(savedTidy) }
+    var langMenuOpen by remember { mutableStateOf(false) }
     var pressureLevel by remember(savedPressure) {
         mutableStateOf(
             when {
@@ -401,6 +411,91 @@ fun SettingsScreen(
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
+
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Handwriting tidy — works in every language", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        Text("Subtle de-wobbles invisibly (default). Strong also straightens near-axis lines. Off keeps raw ink.", fontSize = 12.sp, color = palette.colorScheme.outline)
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TidyLevel.values().forEach { level ->
+                                FilterChip(
+                                    selected = tidyLevel == level,
+                                    onClick = {
+                                        tidyLevel = level
+                                        scope.launch { prefs.setTidyLevel(level) }
+                                    },
+                                    label = { Text(level.name.lowercase().replaceFirstChar { it.uppercase() }, fontSize = 12.sp) }
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Left-handed layout", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                            Text("Mirrors the tablet rails so tools sit under your right thumb", fontSize = 12.sp, color = palette.colorScheme.outline)
+                        }
+                        Switch(
+                            checked = leftHanded,
+                            onCheckedChange = {
+                                leftHanded = it
+                                scope.launch { prefs.setLeftHanded(it) }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // Section: Convert-to-text language (27 packs, English built in)
+            Text(
+                text = "HANDWRITING CONVERT LANGUAGE",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp,
+                color = palette.colorScheme.primary
+            )
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = palette.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    val currentLang = ConvertLanguages.forTag(savedConvertLang)
+                    Text("Lasso-select ink → Convert → typed text. Ink is always kept.", fontSize = 12.sp, color = palette.colorScheme.onSurfaceVariant)
+                    Box {
+                        Card(
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = palette.colorScheme.primaryContainer.copy(alpha = 0.5f)),
+                            modifier = Modifier.clickable { langMenuOpen = true }
+                        ) {
+                            Text(
+                                text = "${currentLang.nativeName} (${currentLang.englishName}) ▾",
+                                fontWeight = FontWeight.Bold,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = palette.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                            )
+                        }
+                        DropdownMenu(expanded = langMenuOpen, onDismissRequest = { langMenuOpen = false }) {
+                            ConvertLanguages.all.forEach { lang ->
+                                DropdownMenuItem(
+                                    text = { Text("${lang.nativeName} — ${lang.englishName}") },
+                                    onClick = {
+                                        scope.launch { prefs.setConvertLang(lang.tag) }
+                                        langMenuOpen = false
+                                        Toast.makeText(context, "Convert language: ${lang.englishName}", Toast.LENGTH_SHORT).show()
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Text(
+                        text = "Each pack (~20MB) downloads once on first convert, then works fully offline. Urdu + Arabic align right automatically.",
+                        fontSize = 11.sp,
+                        color = palette.colorScheme.outline
+                    )
                 }
             }
 
@@ -447,7 +542,7 @@ fun SettingsScreen(
                     Icon(imageVector = Icons.Default.Info, contentDescription = null, tint = palette.colorScheme.primary)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
-                        Text("UltiNote v1.1.3 — local-first school notebook", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+                        Text("UltiNote v1.2.0 — local-first school notebook", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
                         Text("Handwriting with pressure + palm rejection, PDF annotation, layers, photos, stickers, planner. AI companion + cloud sync are Coming Soon — your notes stay on-device for now.", fontSize = 11.sp, color = palette.colorScheme.onSurfaceVariant)
                     }
                 }

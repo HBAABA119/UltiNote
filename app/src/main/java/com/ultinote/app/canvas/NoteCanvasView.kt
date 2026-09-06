@@ -115,6 +115,8 @@ fun NoteCanvasView(
     stylusOnlyInking: Boolean = false,
     autoCorrectionEnabled: Boolean = true,
     pressureMult: Float = 1.0f,
+    readOnly: Boolean = false,
+    tidyLevel: TidyLevel = TidyLevel.SUBTLE,
     strokes: List<DrawingStroke>,
     shapes: List<ShapeAnnotation>,
     textBlocks: List<TextAnnotation>,
@@ -131,8 +133,11 @@ fun NoteCanvasView(
     onAddShape: (ShapeAnnotation) -> Unit,
     onTapForText: (Offset) -> Unit,
     onTapTextItem: (TextAnnotation) -> Unit,
+    onTwoFingerTap: () -> Unit = {},
+    onThreeFingerTap: () -> Unit = {},
     onLassoDelete: (strokeIds: Set<String>, shapeIds: Set<String>, textIds: Set<String>, stickerIds: Set<String>) -> Unit = { _, _, _, _ -> },
-    onLassoDuplicate: (strokeIds: Set<String>, shapeIds: Set<String>, textIds: Set<String>, stickerIds: Set<String>) -> Unit = { _, _, _, _ -> }
+    onLassoDuplicate: (strokeIds: Set<String>, shapeIds: Set<String>, textIds: Set<String>, stickerIds: Set<String>) -> Unit = { _, _, _, _ -> },
+    onLassoConvert: (strokeIds: Set<String>) -> Unit = {}
 ) {
     val palette = LocalKomorebiPalette.current
     val textMeasurer = rememberTextMeasurer()
@@ -196,11 +201,19 @@ fun NoteCanvasView(
                     translationX = panOffset.x,
                     translationY = panOffset.y
                 )
-                // Text tap detector
-                .pointerInput(currentTool) {
-                    detectTapGestures { tapOffset ->
+                // Text tap detector (+ double-tap to zoom in read mode)
+                .pointerInput(currentTool, readOnly) {
+                    detectTapGestures(
+                        onDoubleTap = { tapOffset ->
+                            // 1x <-> 2x anchored on the tap point. Read-mode first aid for small PDF text.
+                            val target = if (zoomScale < 1.6f) 2.0f else 1.0f
+                            val local = (tapOffset - panOffset) / zoomScale
+                            zoomScale = target
+                            panOffset = tapOffset - local * target
+                        }
+                    ) { tapOffset ->
                         val localOffset = (tapOffset - panOffset) / zoomScale
-                        if (currentTool == ToolType.TEXT) {
+                        if (!readOnly && currentTool == ToolType.TEXT) {
                             val tappedBlock = textBlocks.find { b ->
                                 abs(b.x - localOffset.x) < 100f && abs(b.y - localOffset.y) < 40f
                             }
@@ -214,10 +227,10 @@ fun NoteCanvasView(
                 }
                 // High-performance combined gesture recognizer with Catmull-Rom spline interpolation & multi-layer awareness
                 // Supports: pen pressure, S-Pen eraser button, 2-finger zoom, stylus-only palm rejection, lasso select, precision eraser
-                .pointerInput(currentTool, currentColor, currentStrokeWidth, rulerState, currentShapeType, stylusOnlyInking, activeLayerId, layers) {
+                .pointerInput(currentTool, currentColor, currentStrokeWidth, rulerState, currentShapeType, stylusOnlyInking, activeLayerId, layers, readOnly) {
                     awaitEachGesture {
                         val activeLayer = layers.find { it.id == activeLayerId }
-                        if (activeLayer?.isLocked == true) {
+                        if (!readOnly && activeLayer?.isLocked == true) {
                             // Layer is locked: reject drawing operations to preserve artwork
                             return@awaitEachGesture
                         }
@@ -227,6 +240,13 @@ fun NoteCanvasView(
 
                         val down = awaitFirstDown(requireUnconsumed = false)
                         var isMultiTouchPinch = false
+
+                        // Gesture-tap metrics: a quick, still 2-finger tap = undo, 3-finger = redo.
+                        // (Pinch-zoom moves/zooms, so thresholds keep the two apart.)
+                        val gestureStartMs = System.currentTimeMillis()
+                        var maxPointers = 1
+                        var panTravel = 0f
+                        val startZoom = zoomScale
 
                         // S-Pen / USI barrel-button eraser arrives as Eraser type on newer Compose. Treat as eraser instantly.
                         val downIsEraserButton = try {
@@ -242,7 +262,7 @@ fun NoteCanvasView(
                             ToolType.SHAPE
                         )
                         val effectiveTool = if (downIsEraserButton) ToolType.ERASER_STROKE else currentTool
-                        if (effectiveTool in listOf(ToolType.PEN_BALLPOINT, ToolType.PEN_FOUNTAIN, ToolType.PEN_BRUSH, ToolType.HIGHLIGHTER, ToolType.RULER, ToolType.SHAPE)) {
+                        if (!readOnly && effectiveTool in listOf(ToolType.PEN_BALLPOINT, ToolType.PEN_FOUNTAIN, ToolType.PEN_BRUSH, ToolType.HIGHLIGHTER, ToolType.RULER, ToolType.SHAPE)) {
                             hapticManager.performStrokeStartHaptic()
                             if (effectiveTool != ToolType.SHAPE) {
                                 val initPos = (down.position - panOffset) / zoomScale
@@ -252,7 +272,7 @@ fun NoteCanvasView(
                                 activePoints.addAll(smoothedInitial)
                             }
                         }
-                        if (effectiveTool == ToolType.LASSO) {
+                        if (effectiveTool == ToolType.LASSO && !readOnly) {
                             val lp = (down.position - panOffset) / zoomScale
                             lassoStart = lp
                             lassoCurrent = lp
@@ -267,6 +287,7 @@ fun NoteCanvasView(
                             if (pointerCount >= 2) {
                                 // Multi-touch: two-finger pinch-to-zoom and panning — always allowed, even in stylus-only mode
                                 isMultiTouchPinch = true
+                                if (pointerCount > maxPointers) maxPointers = pointerCount
                                 activePoints.clear()
                                 shapeDragStart = null
                                 shapeDragCurrent = null
@@ -275,6 +296,7 @@ fun NoteCanvasView(
 
                                 val zoom = event.calculateZoom()
                                 val pan = event.calculatePan()
+                                panTravel += hypot(pan.x.toDouble(), pan.y.toDouble()).toFloat()
 
                                 val newScale = (zoomScale * zoom).coerceIn(0.5f, 4.0f)
                                 zoomScale = newScale
@@ -286,9 +308,13 @@ fun NoteCanvasView(
                                 val isStylus = change.type == PointerType.Stylus
                                 val isEraserBtn = try { change.type == PointerType.Eraser } catch (_: Exception) { false }
 
-                                // If user enabled palm-rejection stylus-only inking, ignore single finger touches for drawing
-                                // Finger pans instead. Stylus + S-Pen eraser always draw/erase.
-                                if (stylusOnlyInking && !isStylus && !isEraserBtn && effectiveTool != ToolType.LASSO) {
+                                // Read mode: everything pans, nothing inks. Casual PDF scrolling.
+                                if (readOnly) {
+                                    if (change.positionChanged()) {
+                                        panOffset += (change.position - change.previousPosition)
+                                        change.consume()
+                                    }
+                                } else if (stylusOnlyInking && !isStylus && !isEraserBtn && effectiveTool != ToolType.LASSO) {
                                     // Finger pans if stylus-only is active
                                     if (change.positionChanged()) {
                                         panOffset += (change.position - change.previousPosition)
@@ -354,7 +380,22 @@ fun NoteCanvasView(
 
                         // Gesture completed / lifted
                         previousEraserPos = null
-                        if (!isMultiTouchPinch) {
+                        if (isMultiTouchPinch) {
+                            // Quick, still multi-finger taps: 2 fingers = undo, 3+ = redo.
+                            // Real pinches travel/zoom, so thresholds keep them apart.
+                            val elapsed = System.currentTimeMillis() - gestureStartMs
+                            val zoomDrift = abs(zoomScale - startZoom)
+                            if (elapsed < 350 && panTravel < 24f && zoomDrift < 0.06f) {
+                                if (maxPointers == 2) {
+                                    hapticManager.performButtonTapHaptic()
+                                    onTwoFingerTap()
+                                } else if (maxPointers >= 3) {
+                                    hapticManager.performButtonTapHaptic()
+                                    onThreeFingerTap()
+                                }
+                            }
+                        }
+                        if (!isMultiTouchPinch && !readOnly) {
                             if (isDrawingTool) {
                                 hapticManager.performStrokeEndHaptic()
                             }
@@ -378,14 +419,20 @@ fun NoteCanvasView(
                                              isHighlighter = isHighlighter,
                                              layerId = activeLayerId
                                         )
+                                        // Tidy first (geometric de-wobble, language-blind), then shape snap.
+                                        val stroke = if (isHighlighter || effectiveTool == ToolType.RULER) {
+                                            rawStroke
+                                        } else {
+                                            HandwritingTidy.tidy(rawStroke, tidyLevel)
+                                        }
 
                                         if (autoCorrectionEnabled && effectiveTool != ToolType.HIGHLIGHTER && effectiveTool != ToolType.RULER) {
-                                            val shapeResult = ShapeRecognitionService.recognize(rawStroke, activeLayerId)
+                                            val shapeResult = ShapeRecognitionService.recognize(stroke, activeLayerId)
                                             if (shapeResult.snappedShape != null) {
                                                 hapticManager.performSnapHaptic()
                                                 onAddShape(shapeResult.snappedShape)
                                             } else {
-                                                val result = StrokeAutoCorrection.analyzeAndCorrectStroke(rawStroke, enabled = true)
+                                                val result = StrokeAutoCorrection.analyzeAndCorrectStroke(stroke, enabled = true)
                                                 if (result.correctedShape != null) {
                                                     hapticManager.performSnapHaptic()
                                                     onAddShape(result.correctedShape.copy(layerId = activeLayerId))
@@ -393,11 +440,11 @@ fun NoteCanvasView(
                                                     hapticManager.performSnapHaptic()
                                                     onAddStroke(result.correctedStroke.copy(layerId = activeLayerId))
                                                 } else {
-                                                    onAddStroke(rawStroke)
+                                                    onAddStroke(stroke)
                                                 }
                                             }
                                         } else {
-                                            onAddStroke(rawStroke)
+                                            onAddStroke(stroke)
                                         }
                                     }
                                     activePoints.clear()
@@ -649,6 +696,19 @@ fun NoteCanvasView(
                             clearSelection()
                         }.padding(horizontal = 4.dp)
                     )
+                    if (selectedStrokeIds.isNotEmpty()) {
+                        Text(
+                            text = "Convert",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = palette.colorScheme.primary,
+                            modifier = Modifier.clickable {
+                                val ids = selectedStrokeIds
+                                clearSelection()
+                                onLassoConvert(ids)
+                            }.padding(horizontal = 4.dp)
+                        )
+                    }
                     Text(
                         text = "Delete",
                         fontSize = 13.sp,

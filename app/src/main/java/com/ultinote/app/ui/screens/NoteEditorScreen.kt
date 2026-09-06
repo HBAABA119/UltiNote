@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,6 +51,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +62,7 @@ import com.ultinote.app.canvas.NoteCanvasView
 import com.ultinote.app.canvas.PageSnapshot
 import com.ultinote.app.canvas.PalettePresets
 import com.ultinote.app.canvas.RulerState
+import com.ultinote.app.canvas.TidyLevel
 import com.ultinote.app.data.local.KomorebiRepository
 import com.ultinote.app.data.local.SerializationHelpers
 import com.ultinote.app.data.local.UserPreferencesRepository
@@ -75,17 +78,21 @@ import com.ultinote.app.data.model.ShapeType
 import com.ultinote.app.data.model.StickerAnnotation
 import com.ultinote.app.data.model.TextAnnotation
 import com.ultinote.app.data.model.ToolType
+import com.ultinote.app.ink.ConvertLanguages
+import com.ultinote.app.ink.DigitalInkHelper
 import com.ultinote.app.pdf.PdfHelper
 import com.ultinote.app.ui.components.AiStudyCompanionSheet
 import com.ultinote.app.ui.components.EditorToolbar
 import com.ultinote.app.ui.components.FloatingLiquidGlassAiCompanion
 import com.ultinote.app.ui.components.LayersPanel
+import com.ultinote.app.ui.components.LiquidGlassCard
 import com.ultinote.app.ui.components.LiquidGlassInputDialog
 import com.ultinote.app.ui.components.LiquidGlassPillSidebar
 import com.ultinote.app.ui.components.LiquidGlassPillTopBar
 import com.ultinote.app.ui.components.PdfPageThumbnailNavigationSheet
 import com.ultinote.app.ui.components.TextEditDialog
 import com.ultinote.app.ui.theme.LocalKomorebiPalette
+import com.ultinote.app.util.FeatureFlags
 import com.ultinote.app.util.HapticFeedbackManager
 import com.ultinote.app.util.rememberHapticFeedbackManager
 import kotlinx.coroutines.Dispatchers
@@ -129,6 +136,16 @@ fun NoteEditorScreen(
     val savedAutoSnap by prefs.autoSnap.collectAsState(initial = true)
     LaunchedEffect(savedStylusOnly) { stylusOnlyInking = savedStylusOnly }
     LaunchedEffect(savedPressure) { pressureMult = savedPressure }
+
+    // Read vs Draw mode (session-only): read = casual PDF scrolling, no ink possible.
+    var readMode by remember { mutableStateOf(false) }
+    // Tidy + convert configuration (persisted).
+    val savedTidy by prefs.tidyLevel.collectAsState(initial = TidyLevel.SUBTLE)
+    var tidyLevel by remember { mutableStateOf(TidyLevel.SUBTLE) }
+    LaunchedEffect(savedTidy) { tidyLevel = savedTidy }
+    val convertLangTag by prefs.convertLang.collectAsState(initial = "en")
+    val leftHanded by prefs.leftHanded.collectAsState(initial = false)
+    var convertingBusy by remember { mutableStateOf(false) }
 
     // Page Content & Layers
     val currentStrokes = remember { mutableStateListOf<DrawingStroke>() }
@@ -250,6 +267,38 @@ fun NoteEditorScreen(
         redoStack.clear()
     }
 
+    // Render the visible page (with unsaved in-memory ink) to PNG and share it.
+    // Homework portals and teachers want images, not PDFs.
+    fun shareCurrentPageAsImage() {
+        if (pagesState.isEmpty() || currentPageIndex !in pagesState.indices) return
+        val base = pagesState[currentPageIndex]
+        val snapshot = base.copy(
+            strokesJson = SerializationHelpers.strokesToJson(currentStrokes.toList()),
+            shapesJson = SerializationHelpers.shapesToJson(currentShapes.toList()),
+            textBlocksJson = SerializationHelpers.textBlocksToJson(currentTextBlocks.toList()),
+            stickersJson = SerializationHelpers.stickersToJson(currentStickers.toList()),
+            imagesJson = SerializationHelpers.photosToJson(currentPhotos.toList())
+        )
+        Toast.makeText(context, "Rendering page image…", Toast.LENGTH_SHORT).show()
+        coroutineScope.launch(Dispatchers.IO) {
+            try {
+                val file = PdfHelper.exportPageToPng(
+                    context = context,
+                    noteTitle = note?.title ?: "Note",
+                    page = snapshot,
+                    pageNumber = currentPageIndex + 1
+                )
+                withContext(Dispatchers.Main) {
+                    PdfHelper.shareImageFile(context, file, note?.title ?: "Note")
+                }
+            } catch (_: Exception) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "Couldn't render that page", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     // Lasso helpers — operate on parent lists so undo stays correct
     fun deleteLassoSelection(strokeIds: Set<String>, shapeIds: Set<String>, textIds: Set<String>, stickerIds: Set<String>) {
         if (strokeIds.isEmpty() && shapeIds.isEmpty() && textIds.isEmpty() && stickerIds.isEmpty()) return
@@ -279,6 +328,112 @@ fun NoteEditorScreen(
         }
         saveActivePage()
         Toast.makeText(context, "Duplicated selection", Toast.LENGTH_SHORT).show()
+    }
+
+    fun doUndo() {
+        if (undoStack.isEmpty()) return
+        hapticManager.performButtonTapHaptic()
+        val lastSnapshot = undoStack.removeAt(undoStack.size - 1)
+        redoStack.add(
+            PageSnapshot(
+                strokes = currentStrokes.toList(),
+                shapes = currentShapes.toList(),
+                textBlocks = currentTextBlocks.toList(),
+                stickers = currentStickers.toList(),
+                layers = currentLayers.toList()
+            )
+        )
+        currentStrokes.clear()
+        currentStrokes.addAll(lastSnapshot.strokes)
+        currentShapes.clear()
+        currentShapes.addAll(lastSnapshot.shapes)
+        currentTextBlocks.clear()
+        currentTextBlocks.addAll(lastSnapshot.textBlocks)
+        currentStickers.clear()
+        currentStickers.addAll(lastSnapshot.stickers)
+        if (lastSnapshot.layers.isNotEmpty()) {
+            currentLayers.clear()
+            currentLayers.addAll(lastSnapshot.layers)
+            if (currentLayers.none { it.id == activeLayerId }) {
+                activeLayerId = currentLayers.first().id
+            }
+        }
+        saveActivePage()
+    }
+
+    fun doRedo() {
+        if (redoStack.isEmpty()) return
+        hapticManager.performButtonTapHaptic()
+        val nextSnapshot = redoStack.removeAt(redoStack.size - 1)
+        undoStack.add(
+            PageSnapshot(
+                strokes = currentStrokes.toList(),
+                shapes = currentShapes.toList(),
+                textBlocks = currentTextBlocks.toList(),
+                stickers = currentStickers.toList(),
+                layers = currentLayers.toList()
+            )
+        )
+        currentStrokes.clear()
+        currentStrokes.addAll(nextSnapshot.strokes)
+        currentShapes.clear()
+        currentShapes.addAll(nextSnapshot.shapes)
+        currentTextBlocks.clear()
+        currentTextBlocks.addAll(nextSnapshot.textBlocks)
+        currentStickers.clear()
+        currentStickers.addAll(nextSnapshot.stickers)
+        if (nextSnapshot.layers.isNotEmpty()) {
+            currentLayers.clear()
+            currentLayers.addAll(nextSnapshot.layers)
+            if (currentLayers.none { it.id == activeLayerId }) {
+                activeLayerId = currentLayers.first().id
+            }
+        }
+        saveActivePage()
+    }
+
+    // Convert selected handwriting to typed text (opt-in). Ink is always kept.
+    fun convertSelectedStrokes(ids: Set<String>) {
+        if (ids.isEmpty() || convertingBusy) return
+        val strokes = currentStrokes.filter { it.id in ids }
+        if (strokes.isEmpty()) return
+        val tag = convertLangTag
+        val lang = ConvertLanguages.forTag(tag)
+        convertingBusy = true
+        Toast.makeText(context, "Recognizing ${lang.englishName}…", Toast.LENGTH_SHORT).show()
+        coroutineScope.launch(Dispatchers.IO) {
+            val downloaded = DigitalInkHelper.ensureDownloaded(tag)
+            val text = if (downloaded) DigitalInkHelper.recognize(strokes, tag) else null
+            withContext(Dispatchers.Main) {
+                convertingBusy = false
+                if (!text.isNullOrBlank()) {
+                    val pts = strokes.flatMap { it.points }
+                    val x = pts.minOf { it.x }.coerceAtLeast(16f)
+                    val y = pts.maxOf { it.y } + 28f
+                    currentTextBlocks.add(
+                        TextAnnotation(
+                            text = text,
+                            x = x,
+                            y = y,
+                            fontSize = 18f,
+                            color = activeColor,
+                            isBold = false,
+                            layerId = activeLayerId
+                        )
+                    )
+                    saveActivePage()
+                    Toast.makeText(context, "Converted — ink kept", Toast.LENGTH_SHORT).show()
+                } else if (!downloaded) {
+                    Toast.makeText(
+                        context,
+                        "Need the ${lang.englishName} pack once — connect to internet and retry",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } else {
+                    Toast.makeText(context, "Couldn't read that — try clearer strokes", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
     }
 
     // Photo picker — declared after save/push helpers so the callback can use them.
@@ -385,6 +540,85 @@ fun NoteEditorScreen(
             },
             bottomBar = {
                 if (!isTabletLandscape) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        ModeTogglePill(
+                            readMode = readMode,
+                            onToggle = {
+                                readMode = it
+                                hapticManager.performToolSwitchHaptic()
+                            },
+                            modifier = Modifier.padding(bottom = 6.dp)
+                        )
+                        if (readMode) {
+                            // Slim reader chrome: nothing to accidentally ink with.
+                            LiquidGlassCard(
+                                shape = RoundedCornerShape(22.dp),
+                                backgroundColor = palette.glassSurface,
+                                elevation = 4.dp
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TextButton(onClick = {
+                                        readMode = false
+                                        hapticManager.performToolSwitchHaptic()
+                                    }) { Text("Draw") }
+                                    IconButton(onClick = {
+                                        if (currentPageIndex > 0) {
+                                            hapticManager.performPageTurnHaptic()
+                                            saveActivePage()
+                                            currentPageIndex--
+                                        }
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                            contentDescription = "Previous page",
+                                            tint = palette.colorScheme.onSurface
+                                        )
+                                    }
+                                    Text(
+                                        text = "${(currentPageIndex + 1).coerceAtMost(pagesState.size.coerceAtLeast(1))} / ${pagesState.size.coerceAtLeast(1)}",
+                                        fontWeight = FontWeight.Bold,
+                                        color = palette.colorScheme.onSurface,
+                                        modifier = Modifier.padding(horizontal = 6.dp)
+                                    )
+                                    IconButton(onClick = {
+                                        if (currentPageIndex < pagesState.size - 1) {
+                                            hapticManager.performPageTurnHaptic()
+                                            saveActivePage()
+                                            currentPageIndex++
+                                        }
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                            contentDescription = "Next page",
+                                            tint = palette.colorScheme.onSurface
+                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        hapticManager.performButtonTapHaptic()
+                                        showPagesOverview = true
+                                    }) {
+                                        Icon(
+                                            imageVector = Icons.Default.GridView,
+                                            contentDescription = "Pages",
+                                            tint = palette.colorScheme.onSurface
+                                        )
+                                    }
+                                    IconButton(onClick = { shareCurrentPageAsImage() }) {
+                                        Icon(
+                                            imageVector = Icons.Default.Share,
+                                            contentDescription = "Share page as image",
+                                            tint = palette.colorScheme.primary
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
                     EditorToolbar(
                         isVertical = false,
                         activeTool = activeTool,
@@ -422,67 +656,8 @@ fun NoteEditorScreen(
                                 Toast.LENGTH_SHORT
                             ).show()
                         },
-                        onUndo = {
-                            if (undoStack.isNotEmpty()) {
-                                hapticManager.performButtonTapHaptic()
-                                val lastSnapshot = undoStack.removeAt(undoStack.size - 1)
-                                redoStack.add(
-                                    PageSnapshot(
-                                        strokes = currentStrokes.toList(),
-                                        shapes = currentShapes.toList(),
-                                        textBlocks = currentTextBlocks.toList(),
-                                        stickers = currentStickers.toList(),
-                                        layers = currentLayers.toList()
-                                    )
-                                )
-                                currentStrokes.clear()
-                                currentStrokes.addAll(lastSnapshot.strokes)
-                                currentShapes.clear()
-                                currentShapes.addAll(lastSnapshot.shapes)
-                                currentTextBlocks.clear()
-                                currentTextBlocks.addAll(lastSnapshot.textBlocks)
-                                currentStickers.clear()
-                                currentStickers.addAll(lastSnapshot.stickers)
-                                if (lastSnapshot.layers.isNotEmpty()) {
-                                    currentLayers.clear()
-                                    currentLayers.addAll(lastSnapshot.layers)
-                                    if (currentLayers.none { it.id == activeLayerId }) {
-                                        activeLayerId = currentLayers.first().id
-                                    }
-                                }
-                                saveActivePage()
-                            }
-                        },
-                        onRedo = {
-                            if (redoStack.isNotEmpty()) {
-                                val nextSnapshot = redoStack.removeAt(redoStack.size - 1)
-                                undoStack.add(
-                                    PageSnapshot(
-                                        strokes = currentStrokes.toList(),
-                                        shapes = currentShapes.toList(),
-                                        textBlocks = currentTextBlocks.toList(),
-                                        stickers = currentStickers.toList(),
-                                        layers = currentLayers.toList()
-                                    )
-                                )
-                                currentStrokes.clear()
-                                currentStrokes.addAll(nextSnapshot.strokes)
-                                currentShapes.clear()
-                                currentShapes.addAll(nextSnapshot.shapes)
-                                currentTextBlocks.clear()
-                                currentTextBlocks.addAll(nextSnapshot.textBlocks)
-                                currentStickers.clear()
-                                currentStickers.addAll(nextSnapshot.stickers)
-                                if (nextSnapshot.layers.isNotEmpty()) {
-                                    currentLayers.clear()
-                                    currentLayers.addAll(nextSnapshot.layers)
-                                    if (currentLayers.none { it.id == activeLayerId }) {
-                                        activeLayerId = currentLayers.first().id
-                                    }
-                                }
-                                saveActivePage()
-                            }
-                        },
+                        onUndo = { doUndo() },
+                        onRedo = { doRedo() },
                         onOpenAiCompanion = { showAiCompanionSheet = true },
                         onAddSticker = { key ->
                             pushUndoSnapshot()
@@ -501,9 +676,12 @@ fun NoteEditorScreen(
                         onToggleLayers = {
                             showLayersPanel = !showLayersPanel
                             hapticManager.performToolSwitchHaptic()
-                        }
+                        },
+                        showAi = FeatureFlags.AI_COMPANION_ENABLED
                     )
-                }
+                        } // draw-mode dock
+                    } // bottom column
+                } // phone/tablet-portrait chrome
             }
         ) { innerPadding ->
             Row(
@@ -511,6 +689,9 @@ fun NoteEditorScreen(
                     .fillMaxSize()
                     .padding(innerPadding)
             ) {
+                // Local panes so left-handed mode can mirror rails <-> canvas without duplicating code.
+                @Composable
+                fun RailsPane() {
                 if (isTabletLandscape) {
                     LiquidGlassPillSidebar(
                         title = note?.title ?: "Note Editor",
@@ -609,51 +790,8 @@ fun NoteEditorScreen(
                                     Toast.LENGTH_SHORT
                                 ).show()
                             },
-                            onUndo = {
-                                if (undoStack.isNotEmpty()) {
-                                    hapticManager.performButtonTapHaptic()
-                                    val lastSnapshot = undoStack.removeAt(undoStack.size - 1)
-                                    redoStack.add(
-                                        PageSnapshot(
-                                            strokes = currentStrokes.toList(),
-                                            shapes = currentShapes.toList(),
-                                            textBlocks = currentTextBlocks.toList(),
-                                            stickers = currentStickers.toList()
-                                        )
-                                    )
-                                    currentStrokes.clear()
-                                    currentStrokes.addAll(lastSnapshot.strokes)
-                                    currentShapes.clear()
-                                    currentShapes.addAll(lastSnapshot.shapes)
-                                    currentTextBlocks.clear()
-                                    currentTextBlocks.addAll(lastSnapshot.textBlocks)
-                                    currentStickers.clear()
-                                    currentStickers.addAll(lastSnapshot.stickers)
-                                    saveActivePage()
-                                }
-                            },
-                            onRedo = {
-                                if (redoStack.isNotEmpty()) {
-                                    val nextSnapshot = redoStack.removeAt(redoStack.size - 1)
-                                    undoStack.add(
-                                        PageSnapshot(
-                                            strokes = currentStrokes.toList(),
-                                            shapes = currentShapes.toList(),
-                                            textBlocks = currentTextBlocks.toList(),
-                                            stickers = currentStickers.toList()
-                                        )
-                                    )
-                                    currentStrokes.clear()
-                                    currentStrokes.addAll(nextSnapshot.strokes)
-                                    currentShapes.clear()
-                                    currentShapes.addAll(nextSnapshot.shapes)
-                                    currentTextBlocks.clear()
-                                    currentTextBlocks.addAll(nextSnapshot.textBlocks)
-                                    currentStickers.clear()
-                                    currentStickers.addAll(nextSnapshot.stickers)
-                                    saveActivePage()
-                                }
-                            },
+                            onUndo = { doUndo() },
+                            onRedo = { doRedo() },
                             onOpenAiCompanion = { showAiCompanionSheet = true },
                             onAddSticker = { key ->
                                 pushUndoSnapshot()
@@ -667,11 +805,15 @@ fun NoteEditorScreen(
                                 )
                                 saveActivePage()
                             },
-                            onAddImage = { photoPicker.launch("image/*") }
+                            onAddImage = { photoPicker.launch("image/*") },
+                            showAi = FeatureFlags.AI_COMPANION_ENABLED
                         )
                     }
                 }
+                }
 
+                @Composable
+                fun CanvasPane() {
                 Box(
                     modifier = Modifier
                         .weight(1f)
@@ -690,6 +832,8 @@ fun NoteEditorScreen(
                         stylusOnlyInking = stylusOnlyInking,
                         autoCorrectionEnabled = autoCorrectionEnabled,
                         pressureMult = pressureMult,
+                        readOnly = readMode,
+                        tidyLevel = tidyLevel,
                         strokes = currentStrokes,
                         shapes = currentShapes,
                         textBlocks = currentTextBlocks,
@@ -725,6 +869,9 @@ fun NoteEditorScreen(
                         },
                         onLassoDelete = { sIds, shIds, tIds, stIds -> deleteLassoSelection(sIds, shIds, tIds, stIds) },
                         onLassoDuplicate = { sIds, shIds, tIds, stIds -> duplicateLassoSelection(sIds, shIds, tIds, stIds) },
+                        onLassoConvert = { ids -> convertSelectedStrokes(ids) },
+                        onTwoFingerTap = { doUndo() },
+                        onThreeFingerTap = { doRedo() },
                         onAddShape = { shape ->
                             pushUndoSnapshot()
                             currentShapes.add(shape)
@@ -747,7 +894,22 @@ fun NoteEditorScreen(
                         )
                     }
 
-                    // Floating Animated Liquid Glass AI Companion
+                    // Read/Draw mode switch (wide screens keep it floating; phones get it above the dock).
+                    if (isTabletLandscape) {
+                        ModeTogglePill(
+                            readMode = readMode,
+                            onToggle = {
+                                readMode = it
+                                hapticManager.performToolSwitchHaptic()
+                            },
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 10.dp)
+                        )
+                    }
+
+                    // Floating Animated Liquid Glass AI Companion (Coming Soon — hidden for now).
+                    if (FeatureFlags.AI_COMPANION_ENABLED) {
                     FloatingLiquidGlassAiCompanion(
                         isPdf = note?.isPdf == true,
                         noteTitle = note?.title ?: "Note",
@@ -778,7 +940,14 @@ fun NoteEditorScreen(
                             .align(Alignment.BottomEnd)
                             .padding(end = 24.dp, bottom = 24.dp)
                     )
-                }
+                    } // AI companion (flagged off)
+                } // Canvas Box
+                } // CanvasPane
+
+                // Rails left for right-handed writers, right for left-handed.
+                if (!leftHanded) RailsPane()
+                CanvasPane()
+                if (leftHanded) RailsPane()
             }
         }
     }
@@ -824,6 +993,10 @@ fun NoteEditorScreen(
                     repository.movePage(noteId, from, to)
                     currentPageIndex = to
                 }
+            },
+            onSharePageAsImage = {
+                showPagesOverview = false
+                shareCurrentPageAsImage()
             },
             onDismiss = { showPagesOverview = false }
         )
@@ -901,8 +1074,8 @@ fun NoteEditorScreen(
         )
     }
 
-    // AI Study Companion Sheet
-    if (showAiCompanionSheet) {
+    // AI Study Companion Sheet (Coming Soon — flagged off, zero UI traces).
+    if (FeatureFlags.AI_COMPANION_ENABLED && showAiCompanionSheet) {
         AiStudyCompanionSheet(
             sheetState = aiSheetState,
             availableNotes = folderNotes,
@@ -951,6 +1124,54 @@ fun NoteEditorScreen(
                     Toast.makeText(context, "Created study notebook: $title", Toast.LENGTH_SHORT).show()
                 }
             }
+        )
+    }
+}
+
+/** Read/Draw segmented switch shared by the phone dock and the tablet overlay. */
+@Composable
+private fun ModeTogglePill(
+    readMode: Boolean,
+    onToggle: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalKomorebiPalette.current
+    LiquidGlassCard(
+        modifier = modifier,
+        shape = RoundedCornerShape(50.dp),
+        backgroundColor = palette.glassSurface,
+        elevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ModeChip(label = "Read", selected = readMode, onClick = { onToggle(true) })
+            ModeChip(label = "Draw", selected = !readMode, onClick = { onToggle(false) })
+        }
+    }
+}
+
+@Composable
+private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val palette = LocalKomorebiPalette.current
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(
+                if (selected) palette.colorScheme.primaryContainer
+                else androidx.compose.ui.graphics.Color.Transparent
+            )
+            .clickable { onClick() }
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Bold,
+            color = if (selected) palette.colorScheme.onPrimaryContainer
+            else palette.colorScheme.onSurface
         )
     }
 }

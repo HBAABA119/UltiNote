@@ -92,6 +92,7 @@ fun PdfPageThumbnailNavigationSheet(
     onDeletePage: (PageEntity) -> Unit,
     onDuplicatePage: (PageEntity) -> Unit = {},
     onMovePage: (Int, Int) -> Unit = { _, _ -> },
+    onSharePageAsImage: () -> Unit = {},
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
@@ -218,6 +219,18 @@ fun PdfPageThumbnailNavigationSheet(
                     }
 
                     Spacer(modifier = Modifier.width(8.dp))
+
+                    // Share current page as PNG (homework portals want images)
+                    Text(
+                        text = "Share page",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = palette.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            hapticManager.performButtonTapHaptic()
+                            onSharePageAsImage()
+                        }.padding(horizontal = 6.dp, vertical = 8.dp)
+                    )
 
                     IconButton(onClick = onDismiss) {
                         Icon(

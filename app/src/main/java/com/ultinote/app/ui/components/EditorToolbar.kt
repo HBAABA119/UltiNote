@@ -97,6 +97,7 @@ fun EditorToolbar(
     onOpenAiCompanion: () -> Unit,
     onAddSticker: (String) -> Unit,
     onAddImage: () -> Unit = {},
+    showAi: Boolean = true,
     isLayersOpen: Boolean = false,
     onToggleLayers: (() -> Unit)? = null
 ) {
@@ -312,7 +313,8 @@ fun EditorToolbar(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // AI Companion Pill
+                // AI Companion Pill (Coming Soon — hidden for now)
+                if (showAi) {
                 IconButton(
                     onClick = onOpenAiCompanion,
                     modifier = Modifier
@@ -326,6 +328,7 @@ fun EditorToolbar(
                         tint = palette.colorScheme.primary,
                         modifier = Modifier.size(18.dp)
                     )
+                }
                 }
             }
         } else {
@@ -522,6 +525,7 @@ fun EditorToolbar(
 
                 Spacer(modifier = Modifier.width(6.dp))
 
+                if (showAi) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
                     color = palette.colorScheme.primaryContainer,
@@ -545,6 +549,7 @@ fun EditorToolbar(
                         )
                     }
                 }
+                } // showAi
             }
         }
     }

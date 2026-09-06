@@ -143,6 +143,9 @@ fun LibraryScreen(
     val coroutineScope = rememberCoroutineScope()
     val palette = LocalKomorebiPalette.current
     val hapticManager = rememberHapticFeedbackManager()
+    val prefs = remember(context) { com.ultinote.app.data.local.UserPreferencesRepository.get(context) }
+    // Start true so the card never flashes before prefs load; shows only when explicitly unseen.
+    val seenOnboarding by prefs.seenOnboarding.collectAsState(initial = true)
 
     val allFolders by repository.allFolders.collectAsState(initial = emptyList())
     val allNotes by repository.allNotes.collectAsState(initial = emptyList())
@@ -1412,6 +1415,24 @@ fun LibraryScreen(
                                 noteToEditTags = null
                             }
                         }) { Text("Save tags") }
+                    }
+                }
+            }
+        }
+
+        // 0. First-launch onboarding (once ever, 30 seconds)
+        if (!seenOnboarding) {
+            LiquidGlassDialog(onDismissRequest = { coroutineScope.launch { prefs.setSeenOnboarding(true) } }) {
+                Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Welcome to UltiNote", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = palette.colorScheme.onSurface)
+                    Text("Three things and you're set:", fontSize = 13.sp, color = palette.colorScheme.onSurfaceVariant)
+                    Text("✎  Draw a circle — it snaps clean. Writing tidies itself in any language.", fontSize = 13.sp, color = palette.colorScheme.onSurface)
+                    Text("☝☝  Two-finger tap = undo, three-finger tap = redo. Works everywhere.", fontSize = 13.sp, color = palette.colorScheme.onSurface)
+                    Text("📖  Open a note and flip Read / Draw — read scrolls PDFs like a book, draw inks.", fontSize = 13.sp, color = palette.colorScheme.onSurface)
+                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        TextButton(onClick = { coroutineScope.launch { prefs.setSeenOnboarding(true) } }) {
+                            Text("Start writing", fontWeight = FontWeight.Bold, color = palette.colorScheme.primary)
+                        }
                     }
                 }
             }

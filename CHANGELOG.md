@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.2.0 — Reader + handwriting release (2026-09-06)
+
+- Read / Draw mode: read scrolls + zooms PDFs with zero accidental ink, double-tap 1x/2x zoom; slim reader bar on phones, floating pill on tablets
+- Two-finger tap undo, three-finger tap redo (pinch-zoom untouched)
+- Tidy handwriting levels (Off / Subtle default / Strong), geometric + language-blind, in Settings
+- Convert handwriting to typed text: lasso → Convert, 27 on-device languages (English default, packs download once then offline), ink always kept, RTL-aware list
+- Share any page as PNG image (reader bar + pages sheet)
+- AI companion UI fully hidden behind a flag until the backend lands
+- Left-handed tablet layout + first-launch onboarding card
+- New permissions INTERNET / ACCESS_NETWORK_STATE (language-pack downloads only)
+- ⚠️ Uninstall older copies first if coming from ≤ v1.1.1 (signing key changed in v1.1.2)
+
 ## v1.1.3 — app-open crash fix (2026-09-06)
 
 Root cause of "won't open / app has a bug": the manifest's `.MainActivity` resolved to `com.ultinote.app.MainActivity`, but the code still lived in package `com.example` — the launcher activity class didn't exist, so the app crashed the instant you tapped the icon.
