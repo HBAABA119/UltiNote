@@ -10,7 +10,7 @@ That's UltiNote. Local-first, handwriting-first, made for real school life — p
 
 ---
 
-## What it actually does (v1.2.0)
+## What it actually does (v1.2.1)
 
 **Write like paper**
 - Ballpoint / fountain / brush pens with real pressure response (S-Pen, USI, generic active stylus)
@@ -46,6 +46,8 @@ That's UltiNote. Local-first, handwriting-first, made for real school life — p
 - 6 paper themes (Matcha, Sakura, Lavender, Obsidian dark for OLED, Vintage, Nordic) + 4 fonts — all saved on-device
 
 **Looks like glass**
+- Dark-desk editor with a framed, rounded canvas card — real margins, nothing glued to the edges
+- **Retractable side rails**: one edge tab hides everything for full-bleed reading, one tap brings tools back (mirrored for lefties)
 - Apple Liquid Glass-inspired bars, docks, side rails — specular top light, soft shadows, works in light + dark
 - Phone portrait: top bar + bottom dock you can scroll with your thumb
 - Tablet landscape: slim side rail + vertical tool rail, canvas gets the whole screen

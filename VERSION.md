@@ -3,7 +3,16 @@
 Single source of truth for what's in each release and what's queued next.
 `versionCode` / `versionName` live in `app/build.gradle.kts`.
 
-## Current: v1.2.0 (versionCode 6)
+## Current: v1.2.1 (versionCode 7)
+
+Zer0-inspired chrome + landscape reader fixes.
+
+- **Retractable side rails** — edge tab collapses sidebar + tool rail to the side (mirrored for left-handed mode) with slide/fade; full-bleed canvas on demand.
+- **Framed canvas** — 12dp breathing room, 24dp rounded card + soft shadow on a darker desk mat; UI no longer touches screen edges.
+- **Status-pill chrome** — Read/Draw switch restyled as a dark pill with micro-caps labels + accent dot.
+- **Landscape PDF fix** — page renders as a floating paper card (shadow + sheet) that letterboxes intentionally; bitmap re-renders on rotation via a split effect that never touches unsaved ink.
+- **Vector-only UI sweep** — onboarding, lasso pill, thumbnail pills/move buttons all use Material vector icons now; zero emoji in chrome (stickers are user content and stay).
+- Same upload-key signature as v1.1.2+ — installs over v1.1.2/v1.1.3 cleanly. Coming from ≤ v1.1.1, uninstall first.
 
 Reader-first release.
 

@@ -1426,9 +1426,9 @@ fun LibraryScreen(
                 Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text("Welcome to UltiNote", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = palette.colorScheme.onSurface)
                     Text("Three things and you're set:", fontSize = 13.sp, color = palette.colorScheme.onSurfaceVariant)
-                    Text("✎  Draw a circle — it snaps clean. Writing tidies itself in any language.", fontSize = 13.sp, color = palette.colorScheme.onSurface)
-                    Text("☝☝  Two-finger tap = undo, three-finger tap = redo. Works everywhere.", fontSize = 13.sp, color = palette.colorScheme.onSurface)
-                    Text("📖  Open a note and flip Read / Draw — read scrolls PDFs like a book, draw inks.", fontSize = 13.sp, color = palette.colorScheme.onSurface)
+                    Text("Draw a circle — it snaps clean. Writing tidies itself in any language.", fontSize = 13.sp, color = palette.colorScheme.onSurface)
+                    Text("Two-finger tap = undo, three-finger tap = redo. Works everywhere.", fontSize = 13.sp, color = palette.colorScheme.onSurface)
+                    Text("Open a note and flip Read / Draw — read scrolls PDFs like a book, draw inks.", fontSize = 13.sp, color = palette.colorScheme.onSurface)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = { coroutineScope.launch { prefs.setSeenOnboarding(true) } }) {
                             Text("Start writing", fontWeight = FontWeight.Bold, color = palette.colorScheme.primary)

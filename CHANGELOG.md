@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.1 — Zer0-style chrome + landscape reader (2026-09-06)
+
+- Retractable side rails with edge tab (mirrored for lefties), animated
+- Framed canvas: margins, rounded card, shadow — nothing crammed to edges
+- Status-pill Read/Draw chrome, paper-card PDF presentation in any orientation
+- Rotation re-renders the PDF page without risking unsaved ink
+- All UI chrome is vector icons now, no emoji (stickers untouched)
+- Same signature — installs right over v1.1.2/v1.1.3
+
 ## v1.2.0 — Reader + handwriting release (2026-09-06)
 
 - Read / Draw mode: read scrolls + zooms PDFs with zero accidental ink, double-tap 1x/2x zoom; slim reader bar on phones, floating pill on tablets

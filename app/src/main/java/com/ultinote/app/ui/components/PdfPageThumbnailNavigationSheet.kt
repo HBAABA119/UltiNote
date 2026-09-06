@@ -28,6 +28,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -407,7 +409,7 @@ fun PdfThumbnailCard(
                         .padding(8.dp)
                 ) {
                     Text(
-                        text = "✍ $strokeCount",
+                        text = "$strokeCount ink",
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -488,20 +490,24 @@ fun PdfThumbnailCard(
                 )
             }
             if (canMoveLeft && onMoveLeft != null) {
-                Text(
-                    text = "◀",
-                    fontSize = 13.sp,
-                    color = palette.colorScheme.onSurface,
-                    modifier = Modifier.clickable { onMoveLeft() }.padding(4.dp)
-                )
+                IconButton(onClick = { onMoveLeft() }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Move page earlier",
+                        tint = palette.colorScheme.onSurface,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
             if (canMoveRight && onMoveRight != null) {
-                Text(
-                    text = "▶",
-                    fontSize = 13.sp,
-                    color = palette.colorScheme.onSurface,
-                    modifier = Modifier.clickable { onMoveRight() }.padding(4.dp)
-                )
+                IconButton(onClick = { onMoveRight() }, modifier = Modifier.size(28.dp)) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = "Move page later",
+                        tint = palette.colorScheme.onSurface,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
     }

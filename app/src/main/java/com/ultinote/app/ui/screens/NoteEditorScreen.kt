@@ -4,9 +4,19 @@ import android.graphics.Bitmap
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,6 +30,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.GridView
@@ -52,7 +64,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -109,6 +123,9 @@ fun NoteEditorScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    // Re-render the PDF bitmap on rotation so the page always matches the viewport.
+    val orientationKey = configuration.orientation
     val palette = LocalKomorebiPalette.current
     val coroutineScope = rememberCoroutineScope()
     val hapticManager = rememberHapticFeedbackManager()
@@ -139,6 +156,8 @@ fun NoteEditorScreen(
 
     // Read vs Draw mode (session-only): read = casual PDF scrolling, no ink possible.
     var readMode by remember { mutableStateOf(false) }
+    // Rails retraction (session-only): full-bleed canvas when you want it.
+    var railsExpanded by remember { mutableStateOf(true) }
     // Tidy + convert configuration (persisted).
     val savedTidy by prefs.tidyLevel.collectAsState(initial = TidyLevel.SUBTLE)
     var tidyLevel by remember { mutableStateOf(TidyLevel.SUBTLE) }
@@ -225,12 +244,20 @@ fun NoteEditorScreen(
 
             undoStack.clear()
             redoStack.clear()
+        }
+    }
 
-            // If note is PDF, render the PDF page
+    // PDF bitmap lives in its own effect: rotation re-renders the page without
+    // ever touching (or risking) the in-memory ink above.
+    LaunchedEffect(pagesState, currentPageIndex, orientationKey, note) {
+        if (pagesState.isNotEmpty() && currentPageIndex in pagesState.indices) {
             val currentNote = note
             if (currentNote != null && currentNote.isPdf) {
+                val page = pagesState[currentPageIndex]
                 val pdfFile = if (currentNote.pdfFilePath != null) File(currentNote.pdfFilePath) else PdfHelper.getOrCreateSampleMathPdf(context)
                 pdfBitmap = PdfHelper.renderPdfPage(context, pdfFile, page.pdfPageIndex)
+            } else {
+                pdfBitmap = null
             }
         }
     }
@@ -687,6 +714,7 @@ fun NoteEditorScreen(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
+                    .background(palette.canvasDeskMat)
                     .padding(innerPadding)
             ) {
                 // Local panes so left-handed mode can mirror rails <-> canvas without duplicating code.
@@ -814,10 +842,15 @@ fun NoteEditorScreen(
 
                 @Composable
                 fun CanvasPane() {
+                // Framed canvas: 12dp breathing room + 24dp card + soft shadow, Zer0-desk style.
+                // (Gestures are unaffected — clip only changes rendering.)
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxSize()
+                        .padding(12.dp)
+                        .shadow(10.dp, RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(24.dp))
                 ) {
                     // Note Drawing Canvas
                     NoteCanvasView(
@@ -908,6 +941,21 @@ fun NoteEditorScreen(
                         )
                     }
 
+                    // Rail edge tab: retract everything to the side for full-bleed canvas.
+                    if (isTabletLandscape) {
+                        RailEdgeTab(
+                            expanded = railsExpanded,
+                            leftHanded = leftHanded,
+                            onToggle = {
+                                railsExpanded = !railsExpanded
+                                hapticManager.performToolSwitchHaptic()
+                            },
+                            modifier = Modifier.align(
+                                if (leftHanded) Alignment.CenterEnd else Alignment.CenterStart
+                            )
+                        )
+                    }
+
                     // Floating Animated Liquid Glass AI Companion (Coming Soon — hidden for now).
                     if (FeatureFlags.AI_COMPANION_ENABLED) {
                     FloatingLiquidGlassAiCompanion(
@@ -944,10 +992,25 @@ fun NoteEditorScreen(
                 } // Canvas Box
                 } // CanvasPane
 
-                // Rails left for right-handed writers, right for left-handed.
-                if (!leftHanded) RailsPane()
+                // Rails left for right-handed writers, right for left-handed — and
+                // retractable to the side via the edge tab for a full-bleed canvas.
+                val railEnter = slideInHorizontally(
+                    initialOffsetX = { full -> if (!leftHanded) -full / 2 else full / 2 }
+                ) + fadeIn()
+                val railExit = slideOutHorizontally(
+                    targetOffsetX = { full -> if (!leftHanded) -full / 2 else full / 2 }
+                ) + fadeOut()
+                if (!leftHanded) {
+                    AnimatedVisibility(visible = railsExpanded, enter = railEnter, exit = railExit) {
+                        RailsPane()
+                    }
+                }
                 CanvasPane()
-                if (leftHanded) RailsPane()
+                if (leftHanded) {
+                    AnimatedVisibility(visible = railsExpanded, enter = railEnter, exit = railExit) {
+                        RailsPane()
+                    }
+                }
             }
         }
     }
@@ -1128,7 +1191,7 @@ fun NoteEditorScreen(
     }
 }
 
-/** Read/Draw segmented switch shared by the phone dock and the tablet overlay. */
+/** Read/Draw segmented switch — Zer0-style status pill: dark chrome, micro-caps, accent dot. */
 @Composable
 private fun ModeTogglePill(
     readMode: Boolean,
@@ -1136,42 +1199,83 @@ private fun ModeTogglePill(
     modifier: Modifier = Modifier
 ) {
     val palette = LocalKomorebiPalette.current
-    LiquidGlassCard(
-        modifier = modifier,
-        shape = RoundedCornerShape(50.dp),
-        backgroundColor = palette.glassSurface,
-        elevation = 8.dp
+    Row(
+        modifier = modifier
+            .clip(RoundedCornerShape(50.dp))
+            .background(palette.colorScheme.surface.copy(alpha = 0.88f))
+            .border(1.dp, palette.glassBorder, RoundedCornerShape(50.dp))
+            .padding(horizontal = 5.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            ModeChip(label = "Read", selected = readMode, onClick = { onToggle(true) })
-            ModeChip(label = "Draw", selected = !readMode, onClick = { onToggle(false) })
-        }
+        ModeChip(label = "Read", selected = readMode, onClick = { onToggle(true) })
+        ModeChip(label = "Draw", selected = !readMode, onClick = { onToggle(false) })
     }
 }
 
 @Composable
 private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
     val palette = LocalKomorebiPalette.current
-    Box(
+    Row(
         modifier = Modifier
             .clip(RoundedCornerShape(50.dp))
             .background(
-                if (selected) palette.colorScheme.primaryContainer
+                if (selected) palette.colorScheme.primary
                 else androidx.compose.ui.graphics.Color.Transparent
             )
             .clickable { onClick() }
-            .padding(horizontal = 18.dp, vertical = 8.dp),
+            .padding(horizontal = 14.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (selected) {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(palette.colorScheme.onPrimary)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+        }
+        Text(
+            text = label.uppercase(),
+            fontSize = 11.sp,
+            fontWeight = FontWeight.ExtraBold,
+            letterSpacing = 1.sp,
+            color = if (selected) palette.colorScheme.onPrimary
+            else palette.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+/** Slim edge tab that retracts the side rails for a full-bleed canvas. */
+@Composable
+private fun RailEdgeTab(
+    expanded: Boolean,
+    leftHanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val palette = LocalKomorebiPalette.current
+    // Chevron always points toward where the rails will travel.
+    val icon = when {
+        expanded && !leftHanded -> Icons.Default.ChevronLeft
+        expanded && leftHanded -> Icons.Default.ChevronRight
+        !expanded && !leftHanded -> Icons.Default.ChevronRight
+        else -> Icons.Default.ChevronLeft
+    }
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .background(palette.colorScheme.surface.copy(alpha = 0.92f))
+            .border(1.dp, palette.glassBorder, RoundedCornerShape(12.dp))
+            .clickable { onToggle() }
+            .padding(horizontal = 3.dp, vertical = 22.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            fontSize = 13.sp,
-            fontWeight = FontWeight.Bold,
-            color = if (selected) palette.colorScheme.onPrimaryContainer
-            else palette.colorScheme.onSurface
+        Icon(
+            imageVector = icon,
+            contentDescription = if (expanded) "Hide side rails" else "Show side rails",
+            tint = palette.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(18.dp)
         )
     }
 }

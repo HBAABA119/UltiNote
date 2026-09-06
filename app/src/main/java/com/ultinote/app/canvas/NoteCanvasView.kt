@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CenterFocusStrong
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.PanTool
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.Icon
@@ -46,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -512,7 +514,9 @@ fun NoteCanvasView(
             // 1. Draw Page Paper Base
             drawRect(color = palette.canvasBackground, size = size)
 
-            // 2. Draw PDF Background Page if present
+            // 2. Draw PDF Background Page if present — as a floating paper card
+            // (soft shadow + white sheet) so landscape letterboxes look intentional.
+            // Mapping (fit-inside) never changes: ink stays aligned in any orientation.
             if (pdfBitmap != null && !pdfBitmap.isRecycled) {
                 val imgBitmap = pdfBitmap.asImageBitmap()
                 val scale = min(canvasW / imgBitmap.width.toFloat(), canvasH / imgBitmap.height.toFloat())
@@ -521,6 +525,18 @@ fun NoteCanvasView(
                 val destX = (canvasW - destW) / 2f
                 val destY = 20f
 
+                drawRoundRect(
+                    color = Color.Black.copy(alpha = 0.25f),
+                    topLeft = Offset(destX - 2f, destY + 10f),
+                    size = Size(destW + 4f, destH),
+                    cornerRadius = CornerRadius(18f, 18f)
+                )
+                drawRoundRect(
+                    color = Color.White,
+                    topLeft = Offset(destX - 2f, destY - 2f),
+                    size = Size(destW + 4f, destH + 4f),
+                    cornerRadius = CornerRadius(18f, 18f)
+                )
                 drawImage(
                     image = imgBitmap,
                     dstOffset = androidx.compose.ui.unit.IntOffset(destX.toInt(), destY.toInt()),
@@ -719,12 +735,17 @@ fun NoteCanvasView(
                             clearSelection()
                         }.padding(horizontal = 4.dp)
                     )
-                    Text(
-                        text = "✕",
-                        fontSize = 14.sp,
-                        color = palette.colorScheme.onSurface,
-                        modifier = Modifier.clickable { clearSelection() }.padding(horizontal = 4.dp)
-                    )
+                    IconButton(
+                        onClick = { clearSelection() },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Clear selection",
+                            tint = palette.colorScheme.onSurface,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
             }
         }
